@@ -1,27 +1,93 @@
 #!/usr/bin/env python3
 """
-TickTick MCP Server.
+TickTick MCP Server - Comprehensive Task Management Integration.
 
-This server provides comprehensive tools for interacting with TickTick,
+This MCP server provides a complete interface for interacting with TickTick,
 combining both V1 (OAuth2) and V2 (Session) APIs for maximum functionality.
+It enables AI assistants to manage tasks, projects, tags, and track productivity.
 
-Features:
-    - Task management (create, read, update, delete, complete, move)
-    - Project management (CRUD, folders)
-    - Tag management (CRUD, rename, merge)
-    - User information (profile, status, statistics)
-    - Focus/Pomodoro tracking
-    - Full state sync
+=== CAPABILITIES ===
 
-Environment Variables Required:
-    V1 (OAuth2):
-        TICKTICK_CLIENT_ID
-        TICKTICK_CLIENT_SECRET
-        TICKTICK_ACCESS_TOKEN
+Task Management:
+    - Create tasks with titles, due dates, priorities, tags, reminders, and recurrence
+    - Create subtasks (parent-child relationships)
+    - Update, complete, delete, and move tasks between projects
+    - List active, completed, and overdue tasks
+    - Search tasks by title or content
 
-    V2 (Session):
-        TICKTICK_USERNAME
-        TICKTICK_PASSWORD
+Project Management:
+    - Create, read, update, and delete projects
+    - Organize projects into folders
+    - Get project details with all tasks
+
+Tag Management:
+    - Create, rename, merge, and delete tags
+    - Tags support hierarchical nesting
+    - Apply tags to tasks for organization
+
+User Information:
+    - Get user profile and account status
+    - Access productivity statistics (completion rates, scores, levels)
+    - Track focus/pomodoro sessions
+
+=== TICKTICK API BEHAVIORS ===
+
+IMPORTANT: TickTick has several unique API behaviors that tools account for:
+
+1. SOFT DELETE: Deleting tasks moves them to trash (deleted=1) rather than
+   permanently removing them. Deleted tasks remain accessible via get_task.
+
+2. RECURRENCE REQUIRES START_DATE: Creating recurring tasks without a start_date
+   silently ignores the recurrence rule. Always provide start_date with recurrence.
+
+3. PARENT-CHILD RELATIONSHIPS: Setting parent_id during task creation is ignored
+   by the API. Use the make_subtask tool to establish parent-child relationships.
+
+4. DATE CLEARING: To clear a task's due_date or start_date, you must also clear
+   both dates together (TickTick restores due_date from start_date otherwise).
+
+5. TAG ORDER: The API does not preserve tag order - tags may be returned in
+   any order regardless of how they were provided.
+
+6. INBOX: The inbox is a special project that cannot be deleted. Its ID is
+   available via get_status (inbox_id field).
+
+=== AUTHENTICATION ===
+
+This server requires BOTH V1 and V2 authentication for full functionality:
+
+V1 (OAuth2) - Required for get_project_with_data:
+    TICKTICK_CLIENT_ID      - OAuth2 client ID from developer portal
+    TICKTICK_CLIENT_SECRET  - OAuth2 client secret
+    TICKTICK_ACCESS_TOKEN   - Access token from OAuth2 flow
+
+V2 (Session) - Required for most operations:
+    TICKTICK_USERNAME       - TickTick account email
+    TICKTICK_PASSWORD       - TickTick account password
+
+Optional:
+    TICKTICK_REDIRECT_URI   - OAuth2 redirect URI (default: http://localhost:8080/callback)
+    TICKTICK_TIMEOUT        - Request timeout in seconds (default: 30)
+    TICKTICK_DEVICE_ID      - Device identifier (auto-generated if not set)
+
+=== RESPONSE FORMATS ===
+
+All tools support two response formats via the `response_format` parameter:
+
+- "markdown" (default): Human-readable formatted text with headers, lists, and
+  timestamps in readable format. Best for displaying results to users.
+
+- "json": Machine-readable structured data with all available fields.
+  Best for programmatic processing or when specific field values are needed.
+
+=== ERROR HANDLING ===
+
+Tools return clear, actionable error messages:
+- Authentication errors: Check credentials configuration
+- Not found errors: Verify resource ID exists
+- Validation errors: Check input parameters
+- Rate limit errors: Wait before retrying
+- Server errors: Retry or contact support
 """
 
 from __future__ import annotations
@@ -89,6 +155,65 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# =============================================================================
+# Constants
+# =============================================================================
+
+# Maximum response size in characters to prevent overwhelming context
+CHARACTER_LIMIT = 25000
+
+# Default pagination limits
+DEFAULT_TASK_LIMIT = 50
+DEFAULT_PROJECT_LIMIT = 100
+MAX_TASK_LIMIT = 200
+
+
+# =============================================================================
+# Truncation Helper
+# =============================================================================
+
+
+def truncate_response(
+    result: str,
+    items_count: int,
+    truncated_count: int | None = None,
+) -> str:
+    """
+    Truncate response if it exceeds CHARACTER_LIMIT.
+
+    Args:
+        result: The formatted response string
+        items_count: Total number of items before truncation
+        truncated_count: Number of items after truncation (if different)
+
+    Returns:
+        Truncated response with guidance message if needed
+    """
+    if len(result) <= CHARACTER_LIMIT:
+        return result
+
+    # Find a good truncation point (after a complete item)
+    truncate_at = CHARACTER_LIMIT - 500  # Leave room for message
+    truncate_point = result.rfind("\n\n", 0, truncate_at)
+    if truncate_point == -1:
+        truncate_point = result.rfind("\n", 0, truncate_at)
+    if truncate_point == -1:
+        truncate_point = truncate_at
+
+    truncated = result[:truncate_point]
+
+    # Add truncation message
+    message = (
+        f"\n\n---\n"
+        f"⚠️ **Response truncated** (exceeded {CHARACTER_LIMIT:,} characters)\n\n"
+        f"Showing partial results. To see more:\n"
+        f"- Use filters (project_id, tag, priority) to narrow results\n"
+        f"- Use the 'limit' parameter to reduce the number of items\n"
+        f"- Request response_format='json' for more compact output"
+    )
+
+    return truncated + message
+
 
 # =============================================================================
 # Lifespan Management
@@ -136,31 +261,113 @@ def get_client(ctx: Context) -> TickTickClient:
 
 
 def handle_error(e: Exception, operation: str) -> str:
-    """Handle exceptions and return user-friendly error messages."""
+    """
+    Handle exceptions and return user-friendly, actionable error messages.
+
+    Error messages include:
+    1. What went wrong
+    2. Why it might have happened
+    3. Specific steps to resolve the issue
+    """
     logger.exception("Error in %s: %s", operation, e)
 
     error_type = type(e).__name__
+    error_str = str(e)
 
     if "Authentication" in error_type:
         return error_message(
-            "Authentication failed. Please check your credentials.",
-            "Ensure TICKTICK_CLIENT_ID, TICKTICK_CLIENT_SECRET, TICKTICK_ACCESS_TOKEN, "
-            "TICKTICK_USERNAME, and TICKTICK_PASSWORD are set correctly.",
+            "Authentication failed",
+            "NEXT STEPS:\n"
+            "1. Verify environment variables are set:\n"
+            "   - TICKTICK_CLIENT_ID (OAuth2 client ID)\n"
+            "   - TICKTICK_CLIENT_SECRET (OAuth2 client secret)\n"
+            "   - TICKTICK_ACCESS_TOKEN (OAuth2 access token)\n"
+            "   - TICKTICK_USERNAME (TickTick account email)\n"
+            "   - TICKTICK_PASSWORD (TickTick account password)\n"
+            "2. Check that credentials are not expired\n"
+            "3. Re-run OAuth2 flow if access token is invalid"
         )
     elif "NotFound" in error_type:
+        resource_hint = ""
+        if "task" in error_str.lower():
+            resource_hint = (
+                "HINTS:\n"
+                "- Task may have been permanently deleted (not just trashed)\n"
+                "- Use ticktick_list_tasks to see available tasks\n"
+                "- Check if the task ID is correct"
+            )
+        elif "project" in error_str.lower():
+            resource_hint = (
+                "HINTS:\n"
+                "- Use ticktick_list_projects to see available projects\n"
+                "- The inbox project ID can be obtained from ticktick_get_status"
+            )
+        elif "tag" in error_str.lower():
+            resource_hint = (
+                "HINTS:\n"
+                "- Use ticktick_list_tags to see available tags\n"
+                "- Tag names are case-insensitive"
+            )
+        elif "folder" in error_str.lower() or "group" in error_str.lower():
+            resource_hint = (
+                "HINTS:\n"
+                "- Use ticktick_list_folders to see available folders"
+            )
         return error_message(
-            f"Resource not found: {e}",
-            "Verify the ID is correct and the resource exists.",
+            f"Resource not found: {error_str}",
+            resource_hint or "Verify the ID is correct and the resource exists."
         )
     elif "Validation" in error_type:
-        return error_message(f"Invalid input: {e}")
-    elif "Configuration" in error_type:
         return error_message(
-            f"Configuration error: {e}",
-            "Check your environment variables and settings.",
+            f"Invalid input: {error_str}",
+            "Check the parameter types and constraints in the tool documentation."
+        )
+    elif "Configuration" in error_type:
+        if "recurrence" in error_str.lower() and "start_date" in error_str.lower():
+            return error_message(
+                f"Configuration error: {error_str}",
+                "TICKTICK REQUIREMENT: Recurring tasks require a start_date.\n"
+                "Add a start_date parameter when setting recurrence rules."
+            )
+        return error_message(
+            f"Configuration error: {error_str}",
+            "Check your environment variables and tool parameters."
+        )
+    elif "RateLimit" in error_type:
+        return error_message(
+            "Rate limit exceeded",
+            "NEXT STEPS:\n"
+            "1. Wait 30-60 seconds before retrying\n"
+            "2. Reduce the frequency of API calls\n"
+            "3. Batch operations where possible"
+        )
+    elif "Quota" in error_type:
+        return error_message(
+            "Account quota exceeded",
+            "HINTS:\n"
+            "- Free accounts have limited projects/tasks\n"
+            "- Delete unused projects or upgrade to Pro"
+        )
+    elif "Forbidden" in error_type:
+        return error_message(
+            f"Access denied: {error_str}",
+            "You don't have permission to access this resource.\n"
+            "Check if you're the owner or have appropriate sharing permissions."
+        )
+    elif "Server" in error_type:
+        return error_message(
+            f"TickTick server error: {error_str}",
+            "NEXT STEPS:\n"
+            "1. Wait a moment and retry the operation\n"
+            "2. Check if TickTick service is operational\n"
+            "3. Try with different parameters if the issue persists"
         )
     else:
-        return error_message(f"Unexpected error: {e}")
+        return error_message(
+            f"Unexpected error: {error_str}",
+            f"Error type: {error_type}\n"
+            "If this persists, check the server logs for more details."
+        )
 
 
 # =============================================================================
@@ -182,27 +389,66 @@ async def ticktick_create_task(params: TaskCreateInput, ctx: Context) -> str:
     """
     Create a new task in TickTick.
 
-    This tool creates a new task with the specified properties. Tasks can include
-    titles, due dates, priorities, tags, reminders, and recurrence rules.
+    Creates a task with the specified properties. Tasks can include titles,
+    due dates, priorities, tags, reminders, and recurrence rules.
+
+    IMPORTANT TICKTICK BEHAVIORS:
+    - If no project_id is specified, the task is created in the inbox
+    - RECURRENCE REQUIRES start_date: If you set a recurrence rule without
+      start_date, the recurrence will be silently ignored by TickTick
+    - To create a SUBTASK, use ticktick_make_subtask after creating the task.
+      Setting parent_id here does NOT work (TickTick API ignores it on creation)
+    - Tags are created automatically if they don't exist
 
     Args:
-        params: Task creation parameters including:
-            - title (str): Task title (required)
-            - project_id (str): Project to create in (defaults to inbox)
-            - content (str): Task notes/description
-            - priority (str): 'none', 'low', 'medium', 'high'
-            - due_date (str): Due date in ISO format
-            - tags (list): Tag names to apply
-            - reminders (list): Reminder triggers
-            - recurrence (str): RRULE for recurring tasks
+        params: Task creation parameters:
+            - title (str, required): Task title
+            - project_id (str, optional): Project to create in (defaults to inbox).
+              Get inbox ID from ticktick_get_status or project IDs from ticktick_list_projects
+            - content (str, optional): Task notes/description
+            - priority (str, optional): 'none' (default), 'low', 'medium', 'high'
+            - start_date (str, optional): Start date in ISO format (REQUIRED for recurrence)
+            - due_date (str, optional): Due date in ISO format (e.g., "2025-01-20T17:00:00")
+            - tags (list[str], optional): Tag names to apply. Tags are case-insensitive
+            - reminders (list[str], optional): Reminder triggers in iCal format
+              (e.g., "TRIGGER:-PT30M" for 30 minutes before)
+            - recurrence (str, optional): RRULE format (e.g., "RRULE:FREQ=DAILY;INTERVAL=1")
+            - response_format (str): 'markdown' (default) or 'json'
 
     Returns:
-        Formatted task details on success, or error message on failure.
+        On success: Formatted task details showing all created properties
+        On error: Error message with hints for resolution
+
+        JSON format returns:
+        {
+            "id": "task_id",
+            "title": "Task title",
+            "project_id": "project_id",
+            "status": 0,
+            "priority": 0,
+            "due_date": "2025-01-20T17:00:00Z",
+            "tags": ["tag1", "tag2"],
+            ...
+        }
 
     Examples:
-        - Create simple task: title="Buy groceries"
-        - Create with due date: title="Submit report", due_date="2025-01-20T17:00:00"
-        - Create with tags: title="Meeting", tags=["work", "important"], priority="high"
+        Simple task:
+            title="Buy groceries"
+
+        Task with due date:
+            title="Submit report", due_date="2025-01-20T17:00:00", priority="high"
+
+        Recurring task (MUST include start_date):
+            title="Daily standup", start_date="2025-01-15T09:00:00",
+            recurrence="RRULE:FREQ=DAILY;BYDAY=MO,TU,WE,TH,FR"
+
+        Task with tags and reminder:
+            title="Meeting", tags=["work", "important"],
+            reminders=["TRIGGER:-PT15M"]
+
+    When NOT to use:
+        - To create subtasks: Create task first, then use ticktick_make_subtask
+        - To update existing task: Use ticktick_update_task instead
     """
     try:
         client = get_client(ctx)
@@ -341,12 +587,16 @@ async def ticktick_list_tasks(params: TaskListInput, ctx: Context) -> str:
             tasks = [t for t in tasks if t.due_date and t.due_date.date() < today and not t.is_completed]
 
         # Apply limit
+        total_count = len(tasks)
         tasks = tasks[: params.limit]
 
         if params.response_format == ResponseFormat.MARKDOWN:
-            return format_tasks_markdown(tasks)
+            result = format_tasks_markdown(tasks)
         else:
-            return json.dumps(format_tasks_json(tasks), indent=2)
+            result = json.dumps(format_tasks_json(tasks), indent=2)
+
+        # Apply truncation if response is too large
+        return truncate_response(result, total_count, len(tasks))
 
     except Exception as e:
         return handle_error(e, "list_tasks")
