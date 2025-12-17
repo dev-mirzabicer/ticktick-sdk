@@ -94,7 +94,6 @@ from ticktick_mcp.constants import (
     APIVersion,
     DEFAULT_TIMEOUT,
     TICKTICK_API_BASE_V2,
-    X_DEVICE_TEMPLATE,
 )
 from ticktick_mcp.exceptions import TickTickAuthenticationError
 
@@ -152,21 +151,36 @@ class TickTickV2Client(BaseTickTickClient):
         return self._session_handler.is_authenticated
 
     def _get_x_device_header(self) -> str:
-        """Get the x-device header JSON string."""
-        header = X_DEVICE_TEMPLATE.copy()
-        header["id"] = self._session_handler.device_id
-        return json.dumps(header)
+        """Get the x-device header JSON string.
+
+        Uses minimal format (based on pyticktick):
+        Only 3 fields: platform, version, id
+        """
+        return json.dumps({
+            "platform": "web",
+            "version": 6430,
+            "id": self._session_handler.device_id,
+        })
+
+    # Simple User-Agent that works (based on pyticktick)
+    V2_USER_AGENT = "Mozilla/5.0 (rv:145.0) Firefox/145.0"
 
     def _get_auth_headers(self) -> dict[str, str]:
-        """Get V2 authentication headers."""
+        """Get V2 authentication headers.
+
+        Uses minimal headers based on pyticktick's working approach.
+        """
         headers: dict[str, str] = {}
 
         if self._session_handler.session is not None:
             session = self._session_handler.session
-            headers["Authorization"] = session.authorization_header
-            headers["x-device"] = self._get_x_device_header()
 
-            # Add cookies as Cookie header
+            # Override with simple User-Agent for V2 API
+            headers["User-Agent"] = self.V2_USER_AGENT
+            headers["X-Device"] = self._get_x_device_header()
+
+            # Cookie is the primary auth mechanism for V2
+            # The 't' cookie contains the session token
             if session.cookies:
                 cookie_str = "; ".join(
                     f"{k}={v}" for k, v in session.cookies.items()
@@ -612,9 +626,9 @@ class TickTickV2Client(BaseTickTickClient):
         Returns:
             List of completed tasks
         """
-        # Format: YYYY-MM-DD HH:MM:SS (URL encoded)
-        from_str = quote(from_date.strftime("%Y-%m-%d %H:%M:%S"))
-        to_str = quote(to_date.strftime("%Y-%m-%d %H:%M:%S"))
+        # Format: YYYY-MM-DD HH:MM:SS (httpx handles URL encoding)
+        from_str = from_date.strftime("%Y-%m-%d %H:%M:%S")
+        to_str = to_date.strftime("%Y-%m-%d %H:%M:%S")
 
         params = {
             "from": from_str,
@@ -642,8 +656,9 @@ class TickTickV2Client(BaseTickTickClient):
         Returns:
             List of abandoned tasks
         """
-        from_str = quote(from_date.strftime("%Y-%m-%d %H:%M:%S"))
-        to_str = quote(to_date.strftime("%Y-%m-%d %H:%M:%S"))
+        # Format: YYYY-MM-DD HH:MM:SS (httpx handles URL encoding)
+        from_str = from_date.strftime("%Y-%m-%d %H:%M:%S")
+        to_str = to_date.strftime("%Y-%m-%d %H:%M:%S")
 
         params = {
             "from": from_str,

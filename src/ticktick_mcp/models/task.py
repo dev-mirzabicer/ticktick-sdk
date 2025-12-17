@@ -270,8 +270,14 @@ class Task(TickTickModel):
 
         return data
 
-    def to_v2_dict(self) -> dict[str, Any]:
-        """Convert to V2 API format for requests."""
+    def to_v2_dict(self, for_update: bool = False) -> dict[str, Any]:
+        """Convert to V2 API format for requests.
+
+        Args:
+            for_update: If True, sends empty strings for None date fields
+                       to explicitly clear them. For creates, None means
+                       "no value" and is omitted.
+        """
         data: dict[str, Any] = {
             "id": self.id,
             "projectId": self.project_id,
@@ -291,10 +297,18 @@ class Task(TickTickModel):
             data["priority"] = self.priority
         if self.is_all_day is not None:
             data["isAllDay"] = self.is_all_day
+
+        # Date fields: for updates, None means "clear"; for creates, None means "omit"
         if self.start_date is not None:
             data["startDate"] = self.format_datetime(self.start_date, "v2")
+        elif for_update:
+            data["startDate"] = ""
+
         if self.due_date is not None:
             data["dueDate"] = self.format_datetime(self.due_date, "v2")
+        elif for_update:
+            data["dueDate"] = ""
+
         if self.time_zone is not None:
             data["timeZone"] = self.time_zone
         if self.reminders:
@@ -303,8 +317,13 @@ class Task(TickTickModel):
             ]
         if self.repeat_flag is not None:
             data["repeatFlag"] = self.repeat_flag
+
+        # Tags: for updates, always include (empty list clears); for creates, omit if empty
         if self.tags:
             data["tags"] = self.tags
+        elif for_update:
+            data["tags"] = []
+
         if self.sort_order is not None:
             data["sortOrder"] = self.sort_order
         if self.items:

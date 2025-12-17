@@ -23,6 +23,9 @@ from ticktick_mcp.exceptions import (
     TickTickAPIUnavailableError,
     TickTickAuthenticationError,
     TickTickConfigurationError,
+    TickTickForbiddenError,
+    TickTickNotFoundError,
+    TickTickQuotaExceededError,
 )
 from ticktick_mcp.models import (
     Task,
@@ -39,6 +42,78 @@ from ticktick_mcp.unified.router import APIRouter
 logger = logging.getLogger(__name__)
 
 T = TypeVar("T", bound="UnifiedTickTickAPI")
+
+
+# Error codes that map to NotFoundError in batch responses
+_BATCH_NOT_FOUND_ERRORS = frozenset({
+    "TASK_NOT_FOUND",
+    "PROJECT_NOT_FOUND",
+    "TAG_NOT_FOUND",
+    "task not exists",
+    "project not found",
+})
+
+# Error codes that map to QuotaExceededError
+_BATCH_QUOTA_ERRORS = frozenset({
+    "EXCEED_QUOTA",
+})
+
+
+def _check_batch_response_errors(
+    response: dict[str, Any],
+    operation: str,
+    resource_ids: list[str] | None = None,
+) -> None:
+    """Check a V2 batch response for errors and raise appropriate exceptions.
+
+    V2 batch endpoints return HTTP 200 with errors in the `id2error` field.
+    This function checks for those errors and raises semantic exceptions.
+
+    Args:
+        response: The batch response dict with 'id2etag' and 'id2error' fields
+        operation: Operation name for error messages
+        resource_ids: Optional list of resource IDs to check for errors
+
+    Raises:
+        TickTickNotFoundError: If a resource was not found
+        TickTickQuotaExceededError: If quota was exceeded
+        TickTickAPIError: For other errors
+    """
+    id2error = response.get("id2error", {})
+    if not id2error:
+        return
+
+    # If specific IDs provided, only check those
+    if resource_ids:
+        errors_to_check = {k: v for k, v in id2error.items() if k in resource_ids}
+    else:
+        errors_to_check = id2error
+
+    if not errors_to_check:
+        return
+
+    # Check each error and raise the appropriate exception
+    for resource_id, error_msg in errors_to_check.items():
+        error_upper = error_msg.upper() if error_msg else ""
+
+        # Check for not found errors
+        if any(nf in error_upper or nf.upper() in error_upper for nf in _BATCH_NOT_FOUND_ERRORS):
+            raise TickTickNotFoundError(
+                f"Resource not found: {error_msg}",
+                resource_id=resource_id,
+            )
+
+        # Check for quota errors
+        if any(qe in error_upper for qe in _BATCH_QUOTA_ERRORS):
+            raise TickTickQuotaExceededError(
+                f"Quota exceeded: {error_msg}",
+            )
+
+        # Generic error for anything else
+        raise TickTickAPIError(
+            f"{operation} failed: {error_msg}",
+            details={"resource_id": resource_id, "error": error_msg},
+        )
 
 
 class UnifiedTickTickAPI:
@@ -258,28 +333,32 @@ class UnifiedTickTickAPI:
 
         Args:
             task_id: Task identifier
-            project_id: Project ID (required for V1 fallback)
+            project_id: Project ID (required for V1 if V2 unavailable)
 
         Returns:
             Task object
+
+        Raises:
+            TickTickNotFoundError: If the task does not exist
+            TickTickForbiddenError: If access to the task is forbidden
+            TickTickAPIUnavailableError: If no API is available for this operation
         """
         self._ensure_initialized()
 
-        # Try V2 first (doesn't need project_id)
+        # Use V2 (primary) - doesn't need project_id
         if self._router.has_v2:
-            try:
-                data = await self._v2_client.get_task(task_id)  # type: ignore
-                return Task.from_v2(data)
-            except TickTickAPIError:
-                pass
+            # Let resource-level errors propagate - they are definitive answers
+            data = await self._v2_client.get_task(task_id)  # type: ignore
+            return Task.from_v2(data)
 
-        # Fallback to V1
+        # Use V1 if V2 unavailable (requires project_id)
         if self._router.has_v1 and project_id:
             data = await self._v1_client.get_task(project_id, task_id)  # type: ignore
             return Task.from_v1(data)
 
+        # No API available for this operation
         raise TickTickAPIUnavailableError(
-            "Could not get task",
+            "Could not get task: V2 unavailable and V1 requires project_id",
             operation="get_task",
         )
 
@@ -322,8 +401,19 @@ class UnifiedTickTickAPI:
 
         Returns:
             Created task
+
+        Raises:
+            TickTickConfigurationError: If recurrence given without start_date
+            TickTickAPIUnavailableError: If V2 API is not available
         """
         self._ensure_initialized()
+
+        # Validate: recurrence requires start_date (TickTick silently ignores it otherwise)
+        if repeat_flag and not start_date:
+            raise TickTickConfigurationError(
+                "Recurrence (repeat_flag) requires start_date. "
+                "TickTick silently ignores recurrence without a start date."
+            )
 
         # Default to inbox if no project specified
         if project_id is None:
@@ -335,50 +425,44 @@ class UnifiedTickTickAPI:
         start_str = Task.format_datetime(start_date, "v2") if start_date else None
         due_str = Task.format_datetime(due_date, "v2") if due_date else None
 
-        # Use V2 (primary) for richer features
-        if self._router.has_v2:
-            response = await self._v2_client.create_task(  # type: ignore
-                title=title,
-                project_id=project_id,
-                content=content,
-                desc=desc,
-                priority=priority,
-                start_date=start_str,
-                due_date=due_str,
-                time_zone=time_zone,
-                is_all_day=is_all_day,
-                reminders=[{"trigger": r} for r in reminders] if reminders else None,
-                repeat_flag=repeat_flag,
-                tags=tags,
-                parent_id=parent_id,
+        # V2 is REQUIRED (not optional fallback)
+        if not self._router.has_v2:
+            raise TickTickAPIUnavailableError(
+                "V2 API is required for create_task but not available",
+                operation="create_task",
             )
 
-            # Get the created task ID from response
-            task_id = next(iter(response.get("id2etag", {}).keys()), None)
-            if task_id:
-                return await self.get_task(task_id, project_id)
-
-        # Fallback to V1 (loses tags and parent_id)
-        if self._router.has_v1:
-            data = await self._v1_client.create_task(  # type: ignore
-                title=title,
-                project_id=project_id,
-                content=content,
-                desc=desc,
-                priority=priority,
-                start_date=start_str,
-                due_date=due_str,
-                time_zone=time_zone,
-                is_all_day=is_all_day,
-                reminders=reminders,
-                repeat_flag=repeat_flag,
-            )
-            return Task.from_v1(data)
-
-        raise TickTickAPIUnavailableError(
-            "Could not create task",
-            operation="create_task",
+        response = await self._v2_client.create_task(  # type: ignore
+            title=title,
+            project_id=project_id,
+            content=content,
+            desc=desc,
+            priority=priority,
+            start_date=start_str,
+            due_date=due_str,
+            time_zone=time_zone,
+            is_all_day=is_all_day,
+            reminders=[{"trigger": r} for r in reminders] if reminders else None,
+            repeat_flag=repeat_flag,
+            tags=tags,
+            # Note: parent_id is NOT passed here - V2 API ignores it during creation
+            # We set it separately below via set_task_parent
         )
+
+        # Get the created task ID from response
+        task_id = next(iter(response.get("id2etag", {}).keys()), None)
+        if not task_id:
+            raise TickTickAPIError(
+                "V2 create_task succeeded but returned no task ID",
+                details={"response": response},
+            )
+
+        # If parent_id provided, set parent-child relationship separately
+        # (V2 API ignores parentId during task creation)
+        if parent_id:
+            await self._v2_client.set_task_parent(task_id, project_id, parent_id)  # type: ignore
+
+        return await self.get_task(task_id, project_id)
 
     async def update_task(
         self,
@@ -392,18 +476,25 @@ class UnifiedTickTickAPI:
 
         Returns:
             Updated task
+
+        Raises:
+            TickTickNotFoundError: If the task does not exist
+            TickTickAPIError: On other API errors
         """
         self._ensure_initialized()
 
         # Use V2 (primary)
         if self._router.has_v2:
-            data = task.to_v2_dict()
+            data = task.to_v2_dict(for_update=True)
             response = await self._v2_client.batch_tasks(update=[data])  # type: ignore
+
+            # Check for errors in batch response
+            _check_batch_response_errors(response, "update_task", [task.id])
 
             # Return updated task
             return await self.get_task(task.id, task.project_id)
 
-        # Fallback to V1
+        # Use V1 if V2 unavailable
         if self._router.has_v1:
             data = await self._v1_client.update_task(  # type: ignore
                 task_id=task.id,
@@ -431,27 +522,42 @@ class UnifiedTickTickAPI:
         """
         Mark a task as complete.
 
-        Uses V1 API primarily (dedicated endpoint).
+        Uses V2 API primarily (better error handling).
+        Falls back to V1 only if V2 unavailable.
+
+        Note: V2 batch operations silently accept updates to nonexistent tasks,
+        so we verify the task exists first to provide proper error handling.
 
         Args:
             task_id: Task ID
             project_id: Project ID
+
+        Raises:
+            TickTickNotFoundError: If the task does not exist
         """
         self._ensure_initialized()
 
-        # Use V1 (primary) - has dedicated endpoint
-        if self._router.has_v1:
-            await self._v1_client.complete_task(project_id, task_id)  # type: ignore
+        # Use V2 (primary) - better error handling
+        if self._router.has_v2:
+            # V2 batch API silently accepts updates to nonexistent tasks (returns
+            # empty etag but no error). Verify task exists first for proper errors.
+            await self._v2_client.get_task(task_id)  # type: ignore  # Raises NotFoundError if missing
+
+            response = await self._v2_client.batch_tasks(  # type: ignore
+                update=[{
+                    "id": task_id,
+                    "projectId": project_id,
+                    "status": TaskStatus.COMPLETED,
+                    "completedTime": Task.format_datetime(datetime.now(), "v2"),
+                }]
+            )
+            # Check for errors in batch response (shouldn't happen after verify)
+            _check_batch_response_errors(response, "complete_task", [task_id])
             return
 
-        # Fallback to V2 - update status
-        if self._router.has_v2:
-            await self._v2_client.update_task(  # type: ignore
-                task_id=task_id,
-                project_id=project_id,
-                status=TaskStatus.COMPLETED,
-                completed_time=Task.format_datetime(datetime.now(), "v2"),
-            )
+        # Fallback to V1 only if V2 unavailable
+        if self._router.has_v1:
+            await self._v1_client.complete_task(project_id, task_id)  # type: ignore
             return
 
         raise TickTickAPIUnavailableError(
@@ -463,14 +569,23 @@ class UnifiedTickTickAPI:
         """
         Delete a task.
 
+        Note: V2 batch operations silently ignore nonexistent tasks,
+        so we verify the task exists first to provide proper error handling.
+
         Args:
             task_id: Task ID
             project_id: Project ID
+
+        Raises:
+            TickTickNotFoundError: If the task does not exist
         """
         self._ensure_initialized()
 
         # Use V2 (primary)
         if self._router.has_v2:
+            # V2 delete silently ignores nonexistent tasks. Verify first.
+            await self._v2_client.get_task(task_id)  # type: ignore  # Raises NotFoundError if missing
+
             await self._v2_client.delete_task(project_id, task_id)  # type: ignore
             return
 
@@ -518,12 +633,20 @@ class UnifiedTickTickAPI:
 
         V2-only operation.
 
+        Note: V2 move operation silently ignores nonexistent tasks,
+        so we verify the task exists first to provide proper error handling.
+
         Args:
             task_id: Task ID
             from_project_id: Source project ID
             to_project_id: Destination project ID
+
+        Raises:
+            TickTickNotFoundError: If the task does not exist
         """
         self._ensure_initialized()
+        # V2 move silently ignores nonexistent tasks. Verify first.
+        await self._v2_client.get_task(task_id)  # type: ignore  # Raises NotFoundError if missing
         await self._v2_client.move_task(task_id, from_project_id, to_project_id)  # type: ignore
 
     async def set_task_parent(
@@ -537,12 +660,20 @@ class UnifiedTickTickAPI:
 
         V2-only operation.
 
+        Note: V2 set_parent operation silently ignores nonexistent tasks,
+        so we verify the task exists first to provide proper error handling.
+
         Args:
             task_id: Task to make a subtask
             project_id: Project ID
             parent_id: Parent task ID
+
+        Raises:
+            TickTickNotFoundError: If the task does not exist
         """
         self._ensure_initialized()
+        # V2 set_parent silently ignores nonexistent tasks. Verify first.
+        await self._v2_client.get_task(task_id)  # type: ignore  # Raises NotFoundError if missing
         await self._v2_client.set_task_parent(task_id, project_id, parent_id)  # type: ignore
 
     # =========================================================================
@@ -583,20 +714,28 @@ class UnifiedTickTickAPI:
 
         Returns:
             Project object
+
+        Raises:
+            TickTickNotFoundError: If the project does not exist
         """
         self._ensure_initialized()
 
-        # Use V1 (primary) - has dedicated endpoint
-        if self._router.has_v1:
-            data = await self._v1_client.get_project(project_id)  # type: ignore
-            return Project.from_v1(data)
-
-        # Fallback to V2 - get from sync
+        # Use V2 (primary) - requires sync to get project list
         if self._router.has_v2:
             state = await self._v2_client.sync()  # type: ignore
             for p in state.get("projectProfiles", []):
                 if p.get("id") == project_id:
                     return Project.from_v2(p)
+            # Project not found in V2 sync response
+            raise TickTickNotFoundError(
+                f"Project not found: {project_id}",
+                resource_id=project_id,
+            )
+
+        # Use V1 if V2 unavailable - has dedicated endpoint
+        if self._router.has_v1:
+            data = await self._v1_client.get_project(project_id)  # type: ignore
+            return Project.from_v1(data)
 
         raise TickTickAPIUnavailableError(
             "Could not get project",
@@ -614,6 +753,9 @@ class UnifiedTickTickAPI:
 
         Returns:
             ProjectData with project, tasks, and columns
+
+        Raises:
+            TickTickNotFoundError: If the project does not exist
         """
         self._ensure_initialized()
 
@@ -624,6 +766,14 @@ class UnifiedTickTickAPI:
             )
 
         data = await self._v1_client.get_project_with_data(project_id)  # type: ignore
+
+        # V1 returns empty dict {} for nonexistent projects
+        if not data or not data.get("project"):
+            raise TickTickNotFoundError(
+                f"Project not found: {project_id}",
+                resource_id=project_id,
+            )
+
         return ProjectData.from_v1(data)
 
     async def create_project(
@@ -647,48 +797,54 @@ class UnifiedTickTickAPI:
 
         Returns:
             Created project
+
+        Raises:
+            TickTickAPIUnavailableError: If V2 API is not available
         """
         self._ensure_initialized()
 
-        # Use V2 (primary)
-        if self._router.has_v2:
-            response = await self._v2_client.create_project(  # type: ignore
-                name=name,
-                color=color,
-                kind=kind,
-                view_mode=view_mode,
-                group_id=group_id,
+        # V2 is REQUIRED
+        if not self._router.has_v2:
+            raise TickTickAPIUnavailableError(
+                "V2 API is required for create_project but not available",
+                operation="create_project",
             )
-            project_id = next(iter(response.get("id2etag", {}).keys()), None)
-            if project_id:
-                return await self.get_project(project_id)
 
-        # Fallback to V1
-        if self._router.has_v1:
-            data = await self._v1_client.create_project(  # type: ignore
-                name=name,
-                color=color,
-                view_mode=view_mode,
-                kind=kind,
-            )
-            return Project.from_v1(data)
-
-        raise TickTickAPIUnavailableError(
-            "Could not create project",
-            operation="create_project",
+        response = await self._v2_client.create_project(  # type: ignore
+            name=name,
+            color=color,
+            kind=kind,
+            view_mode=view_mode,
+            group_id=group_id,
         )
+        project_id = next(iter(response.get("id2etag", {}).keys()), None)
+        if not project_id:
+            raise TickTickAPIError(
+                "V2 create_project succeeded but returned no project ID",
+                details={"response": response},
+            )
+
+        return await self.get_project(project_id)
 
     async def delete_project(self, project_id: str) -> None:
         """
         Delete a project.
 
+        Note: V2 delete silently ignores nonexistent projects,
+        so we verify the project exists first to provide proper error handling.
+
         Args:
             project_id: Project ID
+
+        Raises:
+            TickTickNotFoundError: If the project does not exist
         """
         self._ensure_initialized()
 
         # Use V2 (primary)
         if self._router.has_v2:
+            # V2 delete silently ignores nonexistent projects. Verify first.
+            await self.get_project(project_id)  # Raises NotFoundError if missing
             await self._v2_client.delete_project(project_id)  # type: ignore
             return
 
@@ -717,7 +873,7 @@ class UnifiedTickTickAPI:
         """
         self._ensure_initialized()
         state = await self._v2_client.sync()  # type: ignore
-        groups_data = state.get("projectGroups", [])
+        groups_data = state.get("projectGroups") or []  # Handle None values
         return [ProjectGroup.from_v2(g) for g in groups_data]
 
     async def create_project_group(self, name: str) -> ProjectGroup:
@@ -751,10 +907,25 @@ class UnifiedTickTickAPI:
 
         V2-only operation.
 
+        Note: V2 delete silently ignores nonexistent groups,
+        so we verify the group exists first to provide proper error handling.
+
         Args:
             group_id: Group ID
+
+        Raises:
+            TickTickNotFoundError: If the group does not exist
         """
         self._ensure_initialized()
+
+        # V2 delete silently ignores nonexistent groups. Verify first.
+        groups = await self.list_project_groups()
+        if not any(g.id == group_id for g in groups):
+            raise TickTickNotFoundError(
+                f"Project group not found: {group_id}",
+                resource_id=group_id,
+            )
+
         await self._v2_client.delete_project_group(group_id)  # type: ignore
 
     # =========================================================================
@@ -809,10 +980,25 @@ class UnifiedTickTickAPI:
 
         V2-only operation.
 
+        Note: V2 delete silently ignores nonexistent tags,
+        so we verify the tag exists first to provide proper error handling.
+
         Args:
             name: Tag name (lowercase identifier)
+
+        Raises:
+            TickTickNotFoundError: If the tag does not exist
         """
         self._ensure_initialized()
+
+        # V2 delete silently ignores nonexistent tags. Verify first.
+        tags = await self.list_tags()
+        if not any(t.name == name for t in tags):
+            raise TickTickNotFoundError(
+                f"Tag not found: {name}",
+                resource_id=name,
+            )
+
         await self._v2_client.delete_tag(name)  # type: ignore
 
     async def rename_tag(self, old_name: str, new_label: str) -> None:
