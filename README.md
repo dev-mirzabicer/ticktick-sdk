@@ -1,6 +1,10 @@
 # ticktick-sdk
 
-A comprehensive async Python library for [TickTick](https://ticktick.com) with [MCP](https://modelcontextprotocol.io/) (Model Context Protocol) server support.
+[![PyPI version](https://badge.fury.io/py/ticktick-sdk.svg)](https://pypi.org/project/ticktick-sdk/)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+A comprehensive async Python SDK for [TickTick](https://ticktick.com) with [MCP](https://modelcontextprotocol.io/) (Model Context Protocol) server support.
 
 **Use TickTick programmatically from Python, or let AI assistants manage your tasks.**
 
@@ -90,25 +94,25 @@ Based on analysis of the actual source code of available TickTick Python librari
 
 ## Installation
 
+### From PyPI (Recommended)
+
 ```bash
-# Clone the repository
+pip install ticktick-sdk
+```
+
+### From Source (Development)
+
+```bash
 git clone https://github.com/dev-mirzabicer/ticktick-sdk.git
 cd ticktick-sdk
-
-# Create virtual environment
 python3 -m venv .venv
 source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-
-# Install the package
-pip install -e .
-
-# For development (includes pytest, etc.)
 pip install -e ".[dev]"
 ```
 
 ### Requirements
 
-- Python 3.10+
+- Python 3.11+
 - TickTick account (free or Pro)
 - For full functionality: both OAuth2 app registration and account credentials
 

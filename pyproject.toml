@@ -61,6 +61,12 @@ dev = [
 [project.scripts]
 ticktick-sdk = "ticktick_sdk.server:main"
 
+[project.urls]
+Homepage = "https://github.com/dev-mirzabicer/ticktick-sdk"
+Repository = "https://github.com/dev-mirzabicer/ticktick-sdk"
+Documentation = "https://github.com/dev-mirzabicer/ticktick-sdk#readme"
+Issues = "https://github.com/dev-mirzabicer/ticktick-sdk/issues"
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/ticktick_sdk"]
 

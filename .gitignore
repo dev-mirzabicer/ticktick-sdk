@@ -1,5 +1,12 @@
+# macOS
+.DS_Store
+
 # Debug files
 DEBUG*.txt
+
+# HAR files (network captures)
+habit-record/
+*.har
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
