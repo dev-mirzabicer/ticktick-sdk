@@ -2410,64 +2410,6 @@ async def ticktick_habit_checkins(params: HabitCheckinsInput, ctx: Context) -> s
 
 
 # =============================================================================
-# Sync Tools
-# =============================================================================
-
-
-@mcp.tool(
-    name="ticktick_sync",
-    annotations={
-        "title": "Full Sync",
-        "readOnlyHint": True,
-        "destructiveHint": False,
-        "idempotentHint": True,
-        "openWorldHint": True,
-    },
-)
-async def ticktick_sync(ctx: Context, response_format: ResponseFormat = ResponseFormat.MARKDOWN) -> str:
-    """
-    Perform a full sync to get all data.
-
-    Retrieves complete account state including all projects, tasks, tags,
-    and settings in a single request.
-
-    Returns:
-        Summary of synced data or error message.
-    """
-    try:
-        client = get_client(ctx)
-        state = await client.sync()
-
-        projects = state.get("projectProfiles", [])
-        tasks = state.get("syncTaskBean", {}).get("update", [])
-        tags = state.get("tags", [])
-        groups = state.get("projectGroups", [])
-
-        if response_format == ResponseFormat.MARKDOWN:
-            lines = [
-                "# TickTick Sync Complete",
-                "",
-                f"- **Projects**: {len(projects)}",
-                f"- **Active Tasks**: {len(tasks)}",
-                f"- **Tags**: {len(tags)}",
-                f"- **Folders**: {len(groups)}",
-                f"- **Inbox ID**: `{state.get('inboxId', 'N/A')}`",
-            ]
-            return "\n".join(lines)
-        else:
-            return json.dumps({
-                "project_count": len(projects),
-                "task_count": len(tasks),
-                "tag_count": len(tags),
-                "folder_count": len(groups),
-                "inbox_id": state.get("inboxId"),
-            }, indent=2)
-
-    except Exception as e:
-        return handle_error(e, "sync")
-
-
-# =============================================================================
 # Main Entry Point
 # =============================================================================
 

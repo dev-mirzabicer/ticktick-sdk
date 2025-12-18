@@ -40,7 +40,7 @@ A comprehensive async Python library for [TickTick](https://ticktick.com) with [
 - **User Analytics**: Productivity scores, levels, completion rates
 
 ### MCP Server
-- **46 Tools**: Comprehensive coverage of TickTick functionality
+- **45 Tools**: Comprehensive coverage of TickTick functionality
 - **AI-Ready**: Works with Claude, GPT, and other MCP-compatible assistants
 - **Dual Output**: Markdown for humans, JSON for machines
 
@@ -823,7 +823,6 @@ Once configured, you can ask Claude things like:
 | `ticktick_get_preferences` | Get user preferences |
 | `ticktick_focus_heatmap` | Get focus heatmap data |
 | `ticktick_focus_by_tag` | Get focus time by tag |
-| `ticktick_sync` | Full account sync |
 
 ---
 
