@@ -3,14 +3,14 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "ticktick-mcp"
+name = "ticktick-sdk"
 version = "0.1.0"
-description = "A comprehensive async Python library for TickTick with MCP server support"
+description = "A comprehensive async Python SDK for TickTick with MCP server support"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.11"
 authors = [
-    { name = "TickTick MCP Contributors" }
+    { name = "TickTick SDK Contributors" }
 ]
 keywords = [
     "ticktick",
@@ -59,10 +59,10 @@ dev = [
 ]
 
 [project.scripts]
-ticktick-mcp = "ticktick_mcp.server:main"
+ticktick-sdk = "ticktick_sdk.server:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/ticktick_mcp"]
+packages = ["src/ticktick_sdk"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
@@ -101,4 +101,4 @@ select = [
 ignore = ["E501"]  # line too long (handled by formatter)
 
 [tool.ruff.lint.isort]
-known-first-party = ["ticktick_mcp"]
+known-first-party = ["ticktick_sdk"]

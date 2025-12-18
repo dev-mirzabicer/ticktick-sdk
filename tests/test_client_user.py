@@ -15,7 +15,7 @@ import pytest
 
 if TYPE_CHECKING:
     from tests.conftest import MockUnifiedAPI
-    from ticktick_mcp.client import TickTickClient
+    from ticktick_sdk.client import TickTickClient
 
 
 pytestmark = [pytest.mark.user, pytest.mark.unit]

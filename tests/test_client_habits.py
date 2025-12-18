@@ -18,11 +18,11 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from ticktick_mcp.models import Habit, HabitSection, HabitPreferences
+from ticktick_sdk.models import Habit, HabitSection, HabitPreferences
 
 if TYPE_CHECKING:
     from tests.conftest import MockUnifiedAPI
-    from ticktick_mcp.client import TickTickClient
+    from ticktick_sdk.client import TickTickClient
 
 
 pytestmark = [pytest.mark.unit]
@@ -113,7 +113,7 @@ class TestGetHabit:
         """Test getting a nonexistent habit."""
         mock_api._habits = {}
 
-        from ticktick_mcp.exceptions import TickTickNotFoundError
+        from ticktick_sdk.exceptions import TickTickNotFoundError
 
         with pytest.raises(TickTickNotFoundError):
             await client.get_habit("nonexistent")
@@ -289,7 +289,7 @@ class TestDeleteHabit:
         """Test deleting a nonexistent habit."""
         mock_api._habits = {}
 
-        from ticktick_mcp.exceptions import TickTickNotFoundError
+        from ticktick_sdk.exceptions import TickTickNotFoundError
 
         with pytest.raises(TickTickNotFoundError):
             await client.delete_habit("nonexistent")

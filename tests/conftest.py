@@ -29,8 +29,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from ticktick_mcp.client import TickTickClient
-from ticktick_mcp.models import (
+from ticktick_sdk.client import TickTickClient
+from ticktick_sdk.models import (
     Task,
     ChecklistItem,
     Project,
@@ -46,7 +46,7 @@ from ticktick_mcp.models import (
     HabitCheckin,
     HabitPreferences,
 )
-from ticktick_mcp.constants import TaskStatus, TaskPriority, ProjectKind, ViewMode
+from ticktick_sdk.constants import TaskStatus, TaskPriority, ProjectKind, ViewMode
 
 
 # =============================================================================
@@ -653,7 +653,7 @@ class MockUnifiedAPI:
         self._check_failure("get_task")
 
         if task_id not in self.tasks:
-            from ticktick_mcp.exceptions import TickTickNotFoundError
+            from ticktick_sdk.exceptions import TickTickNotFoundError
             raise TickTickNotFoundError(f"Task not found: {task_id}")
         return self.tasks[task_id]
 
@@ -663,7 +663,7 @@ class MockUnifiedAPI:
         self._check_failure("update_task")
 
         if task.id not in self.tasks:
-            from ticktick_mcp.exceptions import TickTickNotFoundError
+            from ticktick_sdk.exceptions import TickTickNotFoundError
             raise TickTickNotFoundError(f"Task not found: {task.id}")
 
         task.modified_time = utc_now()
@@ -676,7 +676,7 @@ class MockUnifiedAPI:
         self._check_failure("complete_task")
 
         if task_id not in self.tasks:
-            from ticktick_mcp.exceptions import TickTickNotFoundError
+            from ticktick_sdk.exceptions import TickTickNotFoundError
             raise TickTickNotFoundError(f"Task not found: {task_id}")
 
         task = self.tasks[task_id]
@@ -693,7 +693,7 @@ class MockUnifiedAPI:
         self._check_failure("delete_task")
 
         if task_id not in self.tasks:
-            from ticktick_mcp.exceptions import TickTickNotFoundError
+            from ticktick_sdk.exceptions import TickTickNotFoundError
             raise TickTickNotFoundError(f"Task not found: {task_id}")
 
         # Soft delete - set deleted flag instead of removing
@@ -767,7 +767,7 @@ class MockUnifiedAPI:
         self._check_failure("move_task")
 
         if task_id not in self.tasks:
-            from ticktick_mcp.exceptions import TickTickNotFoundError
+            from ticktick_sdk.exceptions import TickTickNotFoundError
             raise TickTickNotFoundError(f"Task not found: {task_id}")
 
         self.tasks[task_id].project_id = to_project_id
@@ -783,7 +783,7 @@ class MockUnifiedAPI:
         self._check_failure("set_task_parent")
 
         if task_id not in self.tasks:
-            from ticktick_mcp.exceptions import TickTickNotFoundError
+            from ticktick_sdk.exceptions import TickTickNotFoundError
             raise TickTickNotFoundError(f"Task not found: {task_id}")
 
         self.tasks[task_id].parent_id = parent_id
@@ -803,14 +803,14 @@ class MockUnifiedAPI:
         self._check_failure("unset_task_parent")
 
         if task_id not in self.tasks:
-            from ticktick_mcp.exceptions import TickTickNotFoundError
+            from ticktick_sdk.exceptions import TickTickNotFoundError
             raise TickTickNotFoundError(f"Task not found: {task_id}")
 
         task = self.tasks[task_id]
         parent_id = task.parent_id
 
         if not parent_id:
-            from ticktick_mcp.exceptions import TickTickAPIError
+            from ticktick_sdk.exceptions import TickTickAPIError
             raise TickTickAPIError(f"Task {task_id} is not a subtask (has no parent)")
 
         # Remove from parent's child list
@@ -838,7 +838,7 @@ class MockUnifiedAPI:
         self._check_failure("get_project")
 
         if project_id not in self.projects:
-            from ticktick_mcp.exceptions import TickTickNotFoundError
+            from ticktick_sdk.exceptions import TickTickNotFoundError
             raise TickTickNotFoundError(f"Project not found: {project_id}")
         return self.projects[project_id]
 
@@ -848,7 +848,7 @@ class MockUnifiedAPI:
         self._check_failure("get_project_with_data")
 
         if project_id not in self.projects:
-            from ticktick_mcp.exceptions import TickTickNotFoundError
+            from ticktick_sdk.exceptions import TickTickNotFoundError
             raise TickTickNotFoundError(f"Project not found: {project_id}")
 
         project = self.projects[project_id]
@@ -885,7 +885,7 @@ class MockUnifiedAPI:
         self._check_failure("delete_project")
 
         if project_id not in self.projects:
-            from ticktick_mcp.exceptions import TickTickNotFoundError
+            from ticktick_sdk.exceptions import TickTickNotFoundError
             raise TickTickNotFoundError(f"Project not found: {project_id}")
 
         del self.projects[project_id]
@@ -921,7 +921,7 @@ class MockUnifiedAPI:
         self._check_failure("delete_project_group")
 
         if group_id not in self.folders:
-            from ticktick_mcp.exceptions import TickTickNotFoundError
+            from ticktick_sdk.exceptions import TickTickNotFoundError
             raise TickTickNotFoundError(f"Folder not found: {group_id}")
 
         del self.folders[group_id]
@@ -958,7 +958,7 @@ class MockUnifiedAPI:
 
         tag_name = name.lower()
         if tag_name not in self.tags:
-            from ticktick_mcp.exceptions import TickTickNotFoundError
+            from ticktick_sdk.exceptions import TickTickNotFoundError
             raise TickTickNotFoundError(f"Tag not found: {name}")
 
         del self.tags[tag_name]
@@ -973,7 +973,7 @@ class MockUnifiedAPI:
 
         old_tag_name = old_name.lower()
         if old_tag_name not in self.tags:
-            from ticktick_mcp.exceptions import TickTickNotFoundError
+            from ticktick_sdk.exceptions import TickTickNotFoundError
             raise TickTickNotFoundError(f"Tag not found: {old_name}")
 
         tag = self.tags.pop(old_tag_name)
@@ -995,10 +995,10 @@ class MockUnifiedAPI:
         target_name = target.lower()
 
         if source_name not in self.tags:
-            from ticktick_mcp.exceptions import TickTickNotFoundError
+            from ticktick_sdk.exceptions import TickTickNotFoundError
             raise TickTickNotFoundError(f"Source tag not found: {source}")
         if target_name not in self.tags:
-            from ticktick_mcp.exceptions import TickTickNotFoundError
+            from ticktick_sdk.exceptions import TickTickNotFoundError
             raise TickTickNotFoundError(f"Target tag not found: {target}")
 
         # Move tasks from source to target
@@ -1072,7 +1072,7 @@ class MockUnifiedAPI:
         self._check_failure("get_habit")
 
         if habit_id not in self._habits:
-            from ticktick_mcp.exceptions import TickTickNotFoundError
+            from ticktick_sdk.exceptions import TickTickNotFoundError
             raise TickTickNotFoundError(f"Habit not found: {habit_id}")
         return self._habits[habit_id]
 
@@ -1162,7 +1162,7 @@ class MockUnifiedAPI:
         self._check_failure("update_habit")
 
         if habit_id not in self._habits:
-            from ticktick_mcp.exceptions import TickTickNotFoundError
+            from ticktick_sdk.exceptions import TickTickNotFoundError
             raise TickTickNotFoundError(f"Habit not found: {habit_id}")
 
         habit = self._habits[habit_id]
@@ -1197,7 +1197,7 @@ class MockUnifiedAPI:
         self._check_failure("delete_habit")
 
         if habit_id not in self._habits:
-            from ticktick_mcp.exceptions import TickTickNotFoundError
+            from ticktick_sdk.exceptions import TickTickNotFoundError
             raise TickTickNotFoundError(f"Habit not found: {habit_id}")
 
         del self._habits[habit_id]
@@ -1212,7 +1212,7 @@ class MockUnifiedAPI:
         self._check_failure("checkin_habit")
 
         if habit_id not in self._habits:
-            from ticktick_mcp.exceptions import TickTickNotFoundError
+            from ticktick_sdk.exceptions import TickTickNotFoundError
             raise TickTickNotFoundError(f"Habit not found: {habit_id}")
 
         habit = self._habits[habit_id]
@@ -1226,7 +1226,7 @@ class MockUnifiedAPI:
         self._check_failure("archive_habit")
 
         if habit_id not in self._habits:
-            from ticktick_mcp.exceptions import TickTickNotFoundError
+            from ticktick_sdk.exceptions import TickTickNotFoundError
             raise TickTickNotFoundError(f"Habit not found: {habit_id}")
 
         habit = self._habits[habit_id]
@@ -1239,7 +1239,7 @@ class MockUnifiedAPI:
         self._check_failure("unarchive_habit")
 
         if habit_id not in self._habits:
-            from ticktick_mcp.exceptions import TickTickNotFoundError
+            from ticktick_sdk.exceptions import TickTickNotFoundError
             raise TickTickNotFoundError(f"Habit not found: {habit_id}")
 
         habit = self._habits[habit_id]
@@ -1759,7 +1759,7 @@ async def client(request) -> AsyncIterator[TickTickClient]:
         # Mock mode: Get mock_api via request.getfixturevalue to avoid eager evaluation
         mock_api = request.getfixturevalue("mock_api")
 
-        with patch("ticktick_mcp.client.client.UnifiedTickTickAPI") as MockAPIClass:
+        with patch("ticktick_sdk.client.client.UnifiedTickTickAPI") as MockAPIClass:
             MockAPIClass.return_value = mock_api
 
             # Create client with dummy credentials
@@ -1797,7 +1797,7 @@ async def seeded_client(request, seeded_mock_api: MockUnifiedAPI) -> AsyncIterat
         await tracker.cleanup(real_client)
         await real_client.disconnect()
     else:
-        with patch("ticktick_mcp.client.client.UnifiedTickTickAPI") as MockAPIClass:
+        with patch("ticktick_sdk.client.client.UnifiedTickTickAPI") as MockAPIClass:
             MockAPIClass.return_value = seeded_mock_api
 
             client = TickTickClient(

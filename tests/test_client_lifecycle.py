@@ -15,7 +15,7 @@ from unittest.mock import patch
 import pytest
 
 from tests.conftest import MockUnifiedAPI
-from ticktick_mcp.client import TickTickClient
+from ticktick_sdk.client import TickTickClient
 
 
 pytestmark = [pytest.mark.lifecycle, pytest.mark.unit]
@@ -31,7 +31,7 @@ class TestConnection:
 
     async def test_connect(self, mock_api: MockUnifiedAPI):
         """Test basic connection."""
-        with patch("ticktick_mcp.client.client.UnifiedTickTickAPI") as MockAPIClass:
+        with patch("ticktick_sdk.client.client.UnifiedTickTickAPI") as MockAPIClass:
             MockAPIClass.return_value = mock_api
 
             client = TickTickClient(
@@ -49,7 +49,7 @@ class TestConnection:
 
     async def test_disconnect(self, mock_api: MockUnifiedAPI):
         """Test disconnection."""
-        with patch("ticktick_mcp.client.client.UnifiedTickTickAPI") as MockAPIClass:
+        with patch("ticktick_sdk.client.client.UnifiedTickTickAPI") as MockAPIClass:
             MockAPIClass.return_value = mock_api
 
             client = TickTickClient(
@@ -68,7 +68,7 @@ class TestConnection:
 
     async def test_is_connected_property(self, mock_api: MockUnifiedAPI):
         """Test is_connected property reflects state."""
-        with patch("ticktick_mcp.client.client.UnifiedTickTickAPI") as MockAPIClass:
+        with patch("ticktick_sdk.client.client.UnifiedTickTickAPI") as MockAPIClass:
             MockAPIClass.return_value = mock_api
 
             client = TickTickClient(
@@ -102,7 +102,7 @@ class TestContextManager:
 
     async def test_context_manager_connects_and_disconnects(self, mock_api: MockUnifiedAPI):
         """Test that context manager properly connects and disconnects."""
-        with patch("ticktick_mcp.client.client.UnifiedTickTickAPI") as MockAPIClass:
+        with patch("ticktick_sdk.client.client.UnifiedTickTickAPI") as MockAPIClass:
             MockAPIClass.return_value = mock_api
 
             async with TickTickClient(
@@ -121,7 +121,7 @@ class TestContextManager:
 
     async def test_context_manager_returns_client(self, mock_api: MockUnifiedAPI):
         """Test that context manager returns the client."""
-        with patch("ticktick_mcp.client.client.UnifiedTickTickAPI") as MockAPIClass:
+        with patch("ticktick_sdk.client.client.UnifiedTickTickAPI") as MockAPIClass:
             MockAPIClass.return_value = mock_api
 
             async with TickTickClient(
@@ -155,7 +155,7 @@ class TestContextManager:
 
         mock_api.close = tracking_close
 
-        with patch("ticktick_mcp.client.client.UnifiedTickTickAPI") as MockAPIClass:
+        with patch("ticktick_sdk.client.client.UnifiedTickTickAPI") as MockAPIClass:
             MockAPIClass.return_value = mock_api
 
             with pytest.raises(ValueError):
@@ -209,7 +209,7 @@ class TestReconnection:
 
     async def test_connect_twice(self, mock_api: MockUnifiedAPI):
         """Test connecting twice (should be idempotent or handle gracefully)."""
-        with patch("ticktick_mcp.client.client.UnifiedTickTickAPI") as MockAPIClass:
+        with patch("ticktick_sdk.client.client.UnifiedTickTickAPI") as MockAPIClass:
             MockAPIClass.return_value = mock_api
 
             client = TickTickClient(
@@ -228,7 +228,7 @@ class TestReconnection:
 
     async def test_disconnect_twice(self, mock_api: MockUnifiedAPI):
         """Test disconnecting twice (should be safe)."""
-        with patch("ticktick_mcp.client.client.UnifiedTickTickAPI") as MockAPIClass:
+        with patch("ticktick_sdk.client.client.UnifiedTickTickAPI") as MockAPIClass:
             MockAPIClass.return_value = mock_api
 
             client = TickTickClient(
@@ -248,7 +248,7 @@ class TestReconnection:
 
     async def test_reconnect_after_disconnect(self, mock_api: MockUnifiedAPI):
         """Test reconnecting after disconnect."""
-        with patch("ticktick_mcp.client.client.UnifiedTickTickAPI") as MockAPIClass:
+        with patch("ticktick_sdk.client.client.UnifiedTickTickAPI") as MockAPIClass:
             MockAPIClass.return_value = mock_api
 
             client = TickTickClient(
@@ -377,7 +377,7 @@ class TestMultipleClients:
 
     async def test_multiple_clients_independent(self, mock_api: MockUnifiedAPI):
         """Test that multiple client instances are independent."""
-        with patch("ticktick_mcp.client.client.UnifiedTickTickAPI") as MockAPIClass:
+        with patch("ticktick_sdk.client.client.UnifiedTickTickAPI") as MockAPIClass:
             # Create separate mocks for each client
             mock_api1 = MockUnifiedAPI()
             mock_api2 = MockUnifiedAPI()

@@ -22,11 +22,11 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from ticktick_mcp.constants import ProjectKind, ViewMode
+from ticktick_sdk.constants import ProjectKind, ViewMode
 
 if TYPE_CHECKING:
     from tests.conftest import MockUnifiedAPI, ProjectFactory
-    from ticktick_mcp.client import TickTickClient
+    from ticktick_sdk.client import TickTickClient
 
 
 pytestmark = [pytest.mark.projects, pytest.mark.unit]
@@ -168,7 +168,7 @@ class TestProjectRetrieval:
 
     async def test_get_nonexistent_project(self, client: TickTickClient):
         """Test getting a project that doesn't exist."""
-        from ticktick_mcp.exceptions import TickTickNotFoundError
+        from ticktick_sdk.exceptions import TickTickNotFoundError
 
         with pytest.raises(TickTickNotFoundError):
             await client.get_project("nonexistent_project_id")
@@ -249,7 +249,7 @@ class TestProjectDeletion:
 
     async def test_delete_nonexistent_project(self, client: TickTickClient):
         """Test deleting a project that doesn't exist."""
-        from ticktick_mcp.exceptions import TickTickNotFoundError
+        from ticktick_sdk.exceptions import TickTickNotFoundError
 
         with pytest.raises(TickTickNotFoundError):
             await client.delete_project("nonexistent_id")

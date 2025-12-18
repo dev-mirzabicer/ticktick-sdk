@@ -15,8 +15,8 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from ticktick_mcp.client import TickTickClient
-from ticktick_mcp.exceptions import (
+from ticktick_sdk.client import TickTickClient
+from ticktick_sdk.exceptions import (
     TickTickError,
     TickTickAuthenticationError,
     TickTickAPIError,
@@ -177,7 +177,7 @@ class TestAuthenticationErrors:
 
         mock_api.should_fail["initialize"] = TickTickAuthenticationError("Invalid credentials")
 
-        with patch("ticktick_mcp.client.client.UnifiedTickTickAPI") as MockAPIClass:
+        with patch("ticktick_sdk.client.client.UnifiedTickTickAPI") as MockAPIClass:
             MockAPIClass.return_value = mock_api
 
             client = TickTickClient(

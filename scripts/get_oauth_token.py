@@ -28,7 +28,7 @@ import os
 # Add src to path so we can import our modules
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from ticktick_mcp.api.v1.auth import OAuth2Handler
+from ticktick_sdk.api.v1.auth import OAuth2Handler
 
 
 # Configuration - UPDATE THESE VALUES

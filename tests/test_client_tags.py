@@ -16,7 +16,7 @@ import pytest
 
 if TYPE_CHECKING:
     from tests.conftest import MockUnifiedAPI, TagFactory
-    from ticktick_mcp.client import TickTickClient
+    from ticktick_sdk.client import TickTickClient
 
 
 pytestmark = [pytest.mark.tags, pytest.mark.unit]
@@ -174,7 +174,7 @@ class TestTagDeletion:
 
     async def test_delete_nonexistent_tag(self, client: TickTickClient):
         """Test deleting a tag that doesn't exist."""
-        from ticktick_mcp.exceptions import TickTickNotFoundError
+        from ticktick_sdk.exceptions import TickTickNotFoundError
 
         with pytest.raises(TickTickNotFoundError):
             await client.delete_tag("nonexistent_tag")
@@ -232,7 +232,7 @@ class TestTagRename:
 
     async def test_rename_nonexistent_tag(self, client: TickTickClient):
         """Test renaming a tag that doesn't exist."""
-        from ticktick_mcp.exceptions import TickTickNotFoundError
+        from ticktick_sdk.exceptions import TickTickNotFoundError
 
         with pytest.raises(TickTickNotFoundError):
             await client.rename_tag("nonexistent", "NewName")
@@ -296,7 +296,7 @@ class TestTagMerge:
 
     async def test_merge_nonexistent_source(self, client: TickTickClient, mock_api: MockUnifiedAPI):
         """Test merging nonexistent source tag."""
-        from ticktick_mcp.exceptions import TickTickNotFoundError
+        from ticktick_sdk.exceptions import TickTickNotFoundError
 
         target = await client.create_tag(name="Target")
 
@@ -305,7 +305,7 @@ class TestTagMerge:
 
     async def test_merge_nonexistent_target(self, client: TickTickClient, mock_api: MockUnifiedAPI):
         """Test merging into nonexistent target tag."""
-        from ticktick_mcp.exceptions import TickTickNotFoundError
+        from ticktick_sdk.exceptions import TickTickNotFoundError
 
         source = await client.create_tag(name="Source")
 

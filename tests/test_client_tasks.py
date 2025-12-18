@@ -27,12 +27,12 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from ticktick_mcp.constants import TaskPriority, TaskStatus
-from ticktick_mcp.models import Task
+from ticktick_sdk.constants import TaskPriority, TaskStatus
+from ticktick_sdk.models import Task
 
 if TYPE_CHECKING:
     from tests.conftest import MockUnifiedAPI, TaskFactory
-    from ticktick_mcp.client import TickTickClient
+    from ticktick_sdk.client import TickTickClient
 
 
 pytestmark = [pytest.mark.tasks, pytest.mark.unit]
@@ -282,7 +282,7 @@ class TestTaskRetrieval:
 
     async def test_get_nonexistent_task(self, client: TickTickClient):
         """Test getting a task that doesn't exist."""
-        from ticktick_mcp.exceptions import TickTickNotFoundError
+        from ticktick_sdk.exceptions import TickTickNotFoundError
 
         with pytest.raises(TickTickNotFoundError):
             await client.get_task("nonexistent_task_id_12345")
@@ -423,7 +423,7 @@ class TestTaskUpdate:
 
     async def test_update_nonexistent_task(self, client: TickTickClient, task_factory: type[TaskFactory]):
         """Test updating a task that doesn't exist."""
-        from ticktick_mcp.exceptions import TickTickNotFoundError
+        from ticktick_sdk.exceptions import TickTickNotFoundError
 
         fake_task = task_factory.create(id="nonexistent_id_1234567890")
 
@@ -474,7 +474,7 @@ class TestTaskDeletion:
 
     async def test_delete_nonexistent_task(self, client: TickTickClient):
         """Test deleting a task that never existed raises NotFoundError."""
-        from ticktick_mcp.exceptions import TickTickNotFoundError
+        from ticktick_sdk.exceptions import TickTickNotFoundError
 
         with pytest.raises(TickTickNotFoundError):
             await client.delete_task("nonexistent_id", "some_project_id")
@@ -527,7 +527,7 @@ class TestTaskCompletion:
 
     async def test_complete_nonexistent_task(self, client: TickTickClient):
         """Test completing a task that doesn't exist."""
-        from ticktick_mcp.exceptions import TickTickNotFoundError
+        from ticktick_sdk.exceptions import TickTickNotFoundError
 
         with pytest.raises(TickTickNotFoundError):
             await client.complete_task("nonexistent_id", "some_project_id")
@@ -583,7 +583,7 @@ class TestTaskMovement:
 
     async def test_move_nonexistent_task(self, client: TickTickClient):
         """Test moving a task that doesn't exist."""
-        from ticktick_mcp.exceptions import TickTickNotFoundError
+        from ticktick_sdk.exceptions import TickTickNotFoundError
 
         with pytest.raises(TickTickNotFoundError):
             await client.move_task("nonexistent", "project1", "project2")
@@ -652,7 +652,7 @@ class TestSubtasks:
 
     async def test_make_subtask_nonexistent_child(self, client: TickTickClient):
         """Test making a nonexistent task a subtask."""
-        from ticktick_mcp.exceptions import TickTickNotFoundError
+        from ticktick_sdk.exceptions import TickTickNotFoundError
 
         parent = await client.create_task(title="Parent")
 
@@ -680,7 +680,7 @@ class TestSubtasks:
 
     async def test_unparent_subtask_not_a_subtask(self, client: TickTickClient):
         """Test unparenting a task that is not a subtask."""
-        from ticktick_mcp.exceptions import TickTickAPIError
+        from ticktick_sdk.exceptions import TickTickAPIError
 
         task = await client.create_task(title="Top Level Task")
 
@@ -689,7 +689,7 @@ class TestSubtasks:
 
     async def test_unparent_nonexistent_task(self, client: TickTickClient):
         """Test unparenting a nonexistent task."""
-        from ticktick_mcp.exceptions import TickTickNotFoundError
+        from ticktick_sdk.exceptions import TickTickNotFoundError
 
         with pytest.raises(TickTickNotFoundError):
             await client.unparent_subtask("nonexistent", "inbox123")

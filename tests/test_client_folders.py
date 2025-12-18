@@ -15,7 +15,7 @@ import pytest
 
 if TYPE_CHECKING:
     from tests.conftest import MockUnifiedAPI, FolderFactory
-    from ticktick_mcp.client import TickTickClient
+    from ticktick_sdk.client import TickTickClient
 
 
 pytestmark = [pytest.mark.unit]
@@ -141,7 +141,7 @@ class TestFolderDeletion:
 
     async def test_delete_nonexistent_folder(self, client: TickTickClient):
         """Test deleting a folder that doesn't exist."""
-        from ticktick_mcp.exceptions import TickTickNotFoundError
+        from ticktick_sdk.exceptions import TickTickNotFoundError
 
         with pytest.raises(TickTickNotFoundError):
             await client.delete_folder("nonexistent_folder_id")

@@ -1,4 +1,4 @@
-# ticktick-mcp
+# ticktick-sdk
 
 A comprehensive async Python library for [TickTick](https://ticktick.com) with [MCP](https://modelcontextprotocol.io/) (Model Context Protocol) server support.
 
@@ -68,7 +68,7 @@ The official V1 API is limited. Most of TickTick's power features (tags, habits,
 
 Based on analysis of the actual source code of available TickTick Python libraries:
 
-| Feature | ticktick-mcp | [pyticktick](https://github.com/sebpretzer/pyticktick) | [ticktick-py](https://github.com/lazeroffmichael/ticktick-py) | [tickthon](https://github.com/anggelomos/tickthon) | [ticktick-python](https://github.com/glasslion/ticktick-python) |
+| Feature | ticktick-sdk | [pyticktick](https://github.com/sebpretzer/pyticktick) | [ticktick-py](https://github.com/lazeroffmichael/ticktick-py) | [tickthon](https://github.com/anggelomos/tickthon) | [ticktick-python](https://github.com/glasslion/ticktick-python) |
 |---------|:------------:|:----------:|:-----------:|:--------:|:---------------:|
 | **I/O Model** | Async | Async | Sync | Sync | Sync |
 | **Type System** | Pydantic V2 | Pydantic V2 | Dicts | attrs | addict |
@@ -81,7 +81,7 @@ Based on analysis of the actual source code of available TickTick Python librari
 
 **Key Differentiators:**
 
-- **MCP Server**: Only ticktick-mcp provides AI assistant integration via Model Context Protocol
+- **MCP Server**: Only ticktick-sdk provides AI assistant integration via Model Context Protocol
 - **Unified API Routing**: Automatically routes operations to V1 or V2 based on feature requirements
 - **Full Habit CRUD**: Complete habit management including check-ins, streaks, archive/unarchive
 - **Async-First**: Built on `httpx` for high-performance async operations
@@ -92,8 +92,8 @@ Based on analysis of the actual source code of available TickTick Python librari
 
 ```bash
 # Clone the repository
-git clone https://github.com/dev-mirzabicer/ticktick-mcp.git
-cd ticktick-mcp
+git clone https://github.com/dev-mirzabicer/ticktick-sdk.git
+cd ticktick-sdk
 
 # Create virtual environment
 python3 -m venv .venv
@@ -180,7 +180,7 @@ TICKTICK_ACCESS_TOKEN=paste_your_token_here
 ```bash
 python -c "
 import asyncio
-from ticktick_mcp import TickTickClient
+from ticktick_sdk import TickTickClient
 
 async def test():
     async with TickTickClient.from_settings() as client:
@@ -202,13 +202,13 @@ asyncio.run(test())
 
 ```python
 import asyncio
-from ticktick_mcp import TickTickClient
+from ticktick_sdk import TickTickClient
 
 async def main():
     async with TickTickClient.from_settings() as client:
         # Create a task
         task = await client.create_task(
-            title="Learn ticktick-mcp",
+            title="Learn ticktick-sdk",
             tags=["python", "productivity"],
         )
         print(f"Created: {task.title} (ID: {task.id})")
@@ -230,7 +230,7 @@ asyncio.run(main())
 
 ```python
 from datetime import datetime, timedelta
-from ticktick_mcp import TickTickClient
+from ticktick_sdk import TickTickClient
 
 async with TickTickClient.from_settings() as client:
     # Simple task
@@ -464,7 +464,7 @@ TickTick habits are recurring activities you want to track daily. The library pr
 #### Listing and Getting Habits
 
 ```python
-from ticktick_mcp import TickTickClient, Habit
+from ticktick_sdk import TickTickClient, Habit
 
 async with TickTickClient.from_settings() as client:
     # List all habits
@@ -658,7 +658,7 @@ async with TickTickClient.from_settings() as client:
 ### Error Handling
 
 ```python
-from ticktick_mcp import (
+from ticktick_sdk import (
     TickTickClient,
     TickTickError,
     TickTickNotFoundError,
@@ -714,7 +714,7 @@ The MCP server enables AI assistants (like Claude) to manage your TickTick tasks
 
 ```bash
 # Make sure your .env is configured
-ticktick-mcp
+ticktick-sdk
 ```
 
 ### Claude Desktop Integration
@@ -728,8 +728,8 @@ Add to your Claude Desktop config:
 {
   "mcpServers": {
     "ticktick": {
-      "command": "/path/to/ticktick-mcp/.venv/bin/python",
-      "args": ["-m", "ticktick_mcp.server"],
+      "command": "/path/to/ticktick-sdk/.venv/bin/python",
+      "args": ["-m", "ticktick_sdk.server"],
       "env": {
         "TICKTICK_CLIENT_ID": "your_client_id",
         "TICKTICK_CLIENT_SECRET": "your_client_secret",
@@ -1017,7 +1017,7 @@ pytest tests/test_client_habits.py::TestCreateHabit
 pytest --live
 
 # With coverage
-pytest --cov=ticktick_mcp --cov-report=term-missing
+pytest --cov=ticktick_sdk --cov-report=term-missing
 
 # Run only habit tests
 pytest -m habits
@@ -1087,8 +1087,8 @@ Contributions are welcome! Please:
 ### Development Setup
 
 ```bash
-git clone https://github.com/dev-mirzabicer/ticktick-mcp.git
-cd ticktick-mcp
+git clone https://github.com/dev-mirzabicer/ticktick-sdk.git
+cd ticktick-sdk
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev]"
