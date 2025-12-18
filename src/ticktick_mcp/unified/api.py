@@ -622,6 +622,50 @@ class UnifiedTickTickAPI:
         data = await self._v2_client.get_completed_tasks(from_date, to_date, limit)  # type: ignore
         return [Task.from_v2(t) for t in data]
 
+    async def list_abandoned_tasks(
+        self,
+        from_date: datetime,
+        to_date: datetime,
+        limit: int = 100,
+    ) -> list[Task]:
+        """
+        List abandoned ("won't do") tasks in a date range.
+
+        V2-only operation.
+
+        Args:
+            from_date: Start date
+            to_date: End date
+            limit: Maximum results
+
+        Returns:
+            List of abandoned tasks
+        """
+        self._ensure_initialized()
+        data = await self._v2_client.get_abandoned_tasks(from_date, to_date, limit)  # type: ignore
+        return [Task.from_v2(t) for t in data]
+
+    async def list_deleted_tasks(
+        self,
+        start: int = 0,
+        limit: int = 100,
+    ) -> list[Task]:
+        """
+        List deleted tasks (in trash).
+
+        V2-only operation.
+
+        Args:
+            start: Pagination offset
+            limit: Maximum results
+
+        Returns:
+            List of deleted tasks
+        """
+        self._ensure_initialized()
+        data = await self._v2_client.get_deleted_tasks(start, limit)  # type: ignore
+        return [Task.from_v2(t) for t in data.get("tasks", [])]
+
     async def move_task(
         self,
         task_id: str,
@@ -675,6 +719,41 @@ class UnifiedTickTickAPI:
         # V2 set_parent silently ignores nonexistent tasks. Verify first.
         await self._v2_client.get_task(task_id)  # type: ignore  # Raises NotFoundError if missing
         await self._v2_client.set_task_parent(task_id, project_id, parent_id)  # type: ignore
+
+    async def unset_task_parent(
+        self,
+        task_id: str,
+        project_id: str,
+    ) -> None:
+        """
+        Remove a task from being a subtask (make it top-level).
+
+        V2-only operation.
+
+        Note: V2 unset_parent operation silently ignores nonexistent tasks,
+        so we verify the task exists first to provide proper error handling.
+
+        Args:
+            task_id: Task to unparent
+            project_id: Project ID
+
+        Raises:
+            TickTickNotFoundError: If the task does not exist
+            TickTickAPIError: If the task is not a subtask
+        """
+        self._ensure_initialized()
+        # V2 unset_parent silently ignores nonexistent tasks. Verify first.
+        task = await self._v2_client.get_task(task_id)  # type: ignore  # Raises NotFoundError if missing
+
+        # Check if it's actually a subtask
+        parent_id = task.get("parentId")
+        if not parent_id:
+            raise TickTickAPIError(
+                f"Task {task_id} is not a subtask (has no parent)",
+                details={"task_id": task_id},
+            )
+
+        await self._v2_client.unset_task_parent(task_id, project_id, parent_id)  # type: ignore
 
     # =========================================================================
     # Project Operations
@@ -826,6 +905,48 @@ class UnifiedTickTickAPI:
 
         return await self.get_project(project_id)
 
+    async def update_project(
+        self,
+        project_id: str,
+        *,
+        name: str | None = None,
+        color: str | None = None,
+        folder_id: str | None = None,
+    ) -> Project:
+        """
+        Update a project.
+
+        V2-only operation.
+
+        Args:
+            project_id: Project ID
+            name: New name (required)
+            color: New hex color
+            folder_id: New folder ID (use "NONE" to ungroup)
+
+        Returns:
+            Updated project
+
+        Raises:
+            TickTickNotFoundError: If the project does not exist
+        """
+        self._ensure_initialized()
+
+        # Verify project exists first
+        existing = await self.get_project(project_id)
+
+        # Use existing name if not provided
+        project_name = name if name is not None else existing.name
+
+        await self._v2_client.update_project(  # type: ignore
+            project_id=project_id,
+            name=project_name,
+            color=color,
+            group_id=folder_id,
+        )
+
+        return await self.get_project(project_id)
+
     async def delete_project(self, project_id: str) -> None:
         """
         Delete a project.
@@ -901,6 +1022,48 @@ class UnifiedTickTickAPI:
         # Return minimal if not found
         return ProjectGroup(id=group_id or "", name=name)
 
+    async def update_project_group(
+        self,
+        group_id: str,
+        name: str,
+    ) -> ProjectGroup:
+        """
+        Update a project group/folder (rename).
+
+        V2-only operation.
+
+        Args:
+            group_id: Group ID
+            name: New name
+
+        Returns:
+            Updated group
+
+        Raises:
+            TickTickNotFoundError: If the group does not exist
+        """
+        self._ensure_initialized()
+
+        # Verify group exists first
+        groups = await self.list_project_groups()
+        existing = next((g for g in groups if g.id == group_id), None)
+        if not existing:
+            raise TickTickNotFoundError(
+                f"Project group not found: {group_id}",
+                resource_id=group_id,
+            )
+
+        await self._v2_client.update_project_group(group_id, name)  # type: ignore
+
+        # Get updated group
+        groups = await self.list_project_groups()
+        for group in groups:
+            if group.id == group_id:
+                return group
+
+        # Return with new name if not found (shouldn't happen)
+        return ProjectGroup(id=group_id, name=name)
+
     async def delete_project_group(self, group_id: str) -> None:
         """
         Delete a project group/folder.
@@ -973,6 +1136,62 @@ class UnifiedTickTickAPI:
             parent=parent,
         )
         return Tag.create(label, color, parent)
+
+    async def update_tag(
+        self,
+        name: str,
+        *,
+        color: str | None = None,
+        parent: str | None = None,
+    ) -> Tag:
+        """
+        Update a tag's properties (color, parent).
+
+        V2-only operation.
+
+        Args:
+            name: Tag name (lowercase identifier)
+            color: New hex color
+            parent: New parent tag name (or None to remove parent)
+
+        Returns:
+            Updated tag
+
+        Raises:
+            TickTickNotFoundError: If the tag does not exist
+        """
+        self._ensure_initialized()
+
+        # Verify tag exists first
+        tags = await self.list_tags()
+        existing = next((t for t in tags if t.name == name), None)
+        if not existing:
+            raise TickTickNotFoundError(
+                f"Tag not found: {name}",
+                resource_id=name,
+            )
+
+        # Use existing label
+        await self._v2_client.update_tag(  # type: ignore
+            name=name,
+            label=existing.label,
+            color=color,
+            parent=parent,
+        )
+
+        # Get updated tag
+        tags = await self.list_tags()
+        for tag in tags:
+            if tag.name == name:
+                return tag
+
+        # Return existing with updated fields if not found
+        return Tag(
+            name=name,
+            label=existing.label,
+            color=color or existing.color,
+            parent=parent if parent is not None else existing.parent,
+        )
 
     async def delete_tag(self, name: str) -> None:
         """
@@ -1070,6 +1289,25 @@ class UnifiedTickTickAPI:
         data = await self._v2_client.get_user_statistics()  # type: ignore
         return UserStatistics.from_v2(data)
 
+    async def get_user_preferences(self) -> dict[str, Any]:
+        """
+        Get user preferences and settings.
+
+        V2-only operation.
+
+        Returns:
+            User preferences dictionary containing settings like:
+            - timeZone: User's timezone
+            - weekStartDay: First day of week (0=Sunday, 1=Monday, etc.)
+            - startOfDay: Hour when day starts
+            - dateFormat: Date display format
+            - timeFormat: Time display format (12h/24h)
+            - defaultReminder: Default reminder setting
+            - And many more user-configurable options
+        """
+        self._ensure_initialized()
+        return await self._v2_client.get_user_preferences()  # type: ignore
+
     # =========================================================================
     # Focus/Pomodoro Operations (V2 Only)
     # =========================================================================
@@ -1114,3 +1352,32 @@ class UnifiedTickTickAPI:
         self._ensure_initialized()
         data = await self._v2_client.get_focus_by_tag(start_date, end_date)  # type: ignore
         return data.get("tagDurations", {})
+
+    # =========================================================================
+    # Habit Operations (V2 Only)
+    # =========================================================================
+
+    async def get_habit_checkins(
+        self,
+        habit_ids: list[str],
+        after_stamp: int = 0,
+    ) -> dict[str, Any]:
+        """
+        Get habit check-in data.
+
+        V2-only operation.
+
+        Args:
+            habit_ids: List of habit IDs to query
+            after_stamp: Unix timestamp to get check-ins after (0 for all)
+
+        Returns:
+            Habit check-in data dictionary with:
+            - checkins: List of check-in records
+            - Each checkin contains habitId, checkinTime, value, etc.
+
+        Note:
+            To get habit IDs, use sync() and look at the 'habits' field.
+        """
+        self._ensure_initialized()
+        return await self._v2_client.get_habit_checkins(habit_ids, after_stamp)  # type: ignore
