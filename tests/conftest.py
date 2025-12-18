@@ -567,8 +567,14 @@ class MockUnifiedAPI:
         self.user: User = UserFactory.create()
         self.user_status: UserStatus = UserStatusFactory.create()
         self.user_statistics: UserStatistics = UserStatisticsFactory.create()
+        self.user_preferences: dict = {"timeZone": "UTC", "weekStartDay": 0}
         self.inbox_id: str = "inbox123456789"
         self._initialized: bool = False
+
+        # Mock data for special queries
+        self.abandoned_tasks: list = []  # Raw dict data for abandoned tasks
+        self.deleted_tasks: list = []    # Raw dict data for deleted tasks
+        self.habit_checkins: dict = {}   # Habit checkin data
 
         # Track method calls for verification
         self.call_history: list[tuple[str, tuple, dict]] = []

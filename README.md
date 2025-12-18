@@ -4,11 +4,11 @@ A comprehensive async Python library for [TickTick](https://ticktick.com) with [
 
 ## Features
 
-- **Full-Featured Python Client**: Async API for tasks, projects, tags, folders, focus tracking, and more
-- **MCP Server**: 28 tools for AI assistant integration (Claude, etc.)
+- **Full-Featured Python Client**: Async API for tasks, projects, tags, folders, focus tracking, habits, and more
+- **MCP Server**: 36 tools for AI assistant integration (Claude, etc.)
 - **Unified V1/V2 API**: Combines official OAuth2 API with unofficial session API for maximum functionality
 - **Type-Safe**: Full Pydantic v2 validation with comprehensive type hints
-- **Well-Tested**: 289 tests covering both mock and live API interactions
+- **Well-Tested**: 290+ tests covering both mock and live API interactions
 
 ## Why Both APIs?
 
@@ -309,6 +309,9 @@ async with TickTickClient.from_settings() as client:
     # Rename a tag
     await client.rename_tag(old_name="urgent", new_name="priority")
 
+    # Update a tag (change color or parent)
+    await client.update_tag(name="urgent", color="#FF5500")
+
     # Merge tags
     await client.merge_tags(source="old-tag", target="new-tag")
 
@@ -336,6 +339,11 @@ async with TickTickClient.from_settings() as client:
     print(f"Score: {stats.score}")
     print(f"Tasks completed today: {stats.today_completed}")
     print(f"Total pomodoros: {stats.total_pomo_count}")
+
+    # User preferences
+    prefs = await client.get_preferences()
+    print(f"Timezone: {prefs.get('timeZone')}")
+    print(f"Week starts on: {prefs.get('weekStartDay')}")  # 0=Sunday
 ```
 
 ### Focus/Pomodoro Data
@@ -355,6 +363,39 @@ async with TickTickClient.from_settings() as client:
     for tag, seconds in by_tag.items():
         hours = seconds / 3600
         print(f"{tag}: {hours:.1f} hours")
+```
+
+### Habits
+
+```python
+async with TickTickClient.from_settings() as client:
+    # Get habits from sync
+    state = await client.sync()
+    habits = state.get("habits", [])
+    for habit in habits:
+        print(f"Habit: {habit.get('name')} (ID: {habit.get('id')})")
+
+    # Get habit check-ins
+    if habits:
+        habit_ids = [h["id"] for h in habits[:3]]
+        checkins = await client.get_habit_checkins(habit_ids)
+        print(f"Check-ins: {checkins}")
+```
+
+### Advanced Task Queries
+
+```python
+async with TickTickClient.from_settings() as client:
+    # Get abandoned tasks ("won't do")
+    abandoned = await client.get_abandoned_tasks(days=30)
+    print(f"Abandoned tasks: {len(abandoned)}")
+
+    # Get deleted tasks (in trash)
+    deleted = await client.get_deleted_tasks(limit=50)
+    print(f"Deleted tasks: {len(deleted)}")
+
+    # Unparent a subtask (make it top-level)
+    await client.unparent_subtask(task_id="...", project_id="...")
 ```
 
 ### Full Sync
@@ -444,25 +485,33 @@ Add to your Claude Desktop config (`~/Library/Application Support/Claude/claude_
 | `ticktick_delete_task` | Delete a task |
 | `ticktick_move_task` | Move task between projects |
 | `ticktick_make_subtask` | Create parent-child relationship |
+| `ticktick_unparent_subtask` | Remove parent-child relationship |
 | `ticktick_completed_tasks` | List recently completed tasks |
+| `ticktick_abandoned_tasks` | List abandoned ("won't do") tasks |
+| `ticktick_deleted_tasks` | List deleted tasks (in trash) |
 | `ticktick_search_tasks` | Search tasks by text |
 | `ticktick_list_projects` | List all projects |
 | `ticktick_get_project` | Get project details |
 | `ticktick_create_project` | Create a new project |
+| `ticktick_update_project` | Update project properties |
 | `ticktick_delete_project` | Delete a project |
 | `ticktick_list_folders` | List all folders |
 | `ticktick_create_folder` | Create a folder |
+| `ticktick_rename_folder` | Rename a folder |
 | `ticktick_delete_folder` | Delete a folder |
 | `ticktick_list_tags` | List all tags |
 | `ticktick_create_tag` | Create a tag |
+| `ticktick_update_tag` | Update tag properties |
 | `ticktick_delete_tag` | Delete a tag |
 | `ticktick_rename_tag` | Rename a tag |
 | `ticktick_merge_tags` | Merge two tags |
 | `ticktick_get_profile` | Get user profile |
 | `ticktick_get_status` | Get account status |
 | `ticktick_get_statistics` | Get productivity stats |
+| `ticktick_get_preferences` | Get user preferences |
 | `ticktick_focus_heatmap` | Get focus heatmap |
 | `ticktick_focus_by_tag` | Get focus time by tag |
+| `ticktick_habit_checkins` | Get habit check-in data |
 | `ticktick_sync` | Full account sync |
 
 ---

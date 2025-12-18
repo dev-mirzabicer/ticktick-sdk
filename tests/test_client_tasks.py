@@ -651,6 +651,41 @@ class TestSubtasks:
         with pytest.raises(TickTickNotFoundError):
             await client.make_subtask("nonexistent", parent.id, parent.project_id)
 
+    async def test_unparent_subtask(self, client: TickTickClient):
+        """Test removing a subtask from its parent."""
+        parent = await client.create_task(title="Parent Task")
+        child = await client.create_task(title="Child Task", project_id=parent.project_id)
+
+        # First make it a subtask
+        await client.make_subtask(child.id, parent.id, parent.project_id)
+
+        # Verify it's a subtask
+        child_task = await client.get_task(child.id)
+        assert child_task.parent_id == parent.id
+
+        # Now unparent it
+        await client.unparent_subtask(child.id, parent.project_id)
+
+        # Verify it's no longer a subtask
+        child_task = await client.get_task(child.id)
+        assert child_task.parent_id is None
+
+    async def test_unparent_subtask_not_a_subtask(self, client: TickTickClient):
+        """Test unparenting a task that is not a subtask."""
+        from ticktick_mcp.exceptions import TickTickAPIError
+
+        task = await client.create_task(title="Top Level Task")
+
+        with pytest.raises(TickTickAPIError):
+            await client.unparent_subtask(task.id, task.project_id)
+
+    async def test_unparent_nonexistent_task(self, client: TickTickClient):
+        """Test unparenting a nonexistent task."""
+        from ticktick_mcp.exceptions import TickTickNotFoundError
+
+        with pytest.raises(TickTickNotFoundError):
+            await client.unparent_subtask("nonexistent", "inbox123")
+
 
 # =============================================================================
 # Task Listing Tests
@@ -797,6 +832,46 @@ class TestTaskListing:
         # Should find task completed today
         completed = await client.get_completed_tasks(days=1)
         assert len(completed) >= 1
+
+    @pytest.mark.mock_only
+    async def test_get_abandoned_tasks(self, client: TickTickClient, mock_api: MockUnifiedAPI):
+        """Test getting abandoned (won't do) tasks.
+
+        Mock-only because we can't mark tasks as abandoned via the public API.
+        """
+        # Create tasks and mock them as abandoned
+        mock_api.abandoned_tasks = [
+            {"id": "abc123", "projectId": "proj1", "title": "Abandoned Task 1", "status": -1},
+            {"id": "def456", "projectId": "proj1", "title": "Abandoned Task 2", "status": -1},
+        ]
+
+        abandoned = await client.get_abandoned_tasks(days=7, limit=100)
+
+        assert len(abandoned) == 2
+        assert all(t.status == TaskStatus.ABANDONED for t in abandoned)
+
+    @pytest.mark.mock_only
+    async def test_get_deleted_tasks(self, client: TickTickClient, mock_api: MockUnifiedAPI):
+        """Test getting deleted tasks (in trash).
+
+        Mock-only because we need to set up the trash state.
+        """
+        # Create tasks and mock them as deleted/in trash
+        mock_api.deleted_tasks = [
+            {"id": "trash1", "projectId": "proj1", "title": "Deleted Task 1", "deleted": 1},
+            {"id": "trash2", "projectId": "proj1", "title": "Deleted Task 2", "deleted": 1},
+        ]
+
+        deleted = await client.get_deleted_tasks(limit=100)
+
+        assert len(deleted) == 2
+
+    async def test_get_deleted_tasks_empty(self, client: TickTickClient, mock_api: MockUnifiedAPI):
+        """Test getting deleted tasks when trash is empty."""
+        deleted = await client.get_deleted_tasks(limit=100)
+
+        # Should return empty list, not error
+        assert isinstance(deleted, list)
 
 
 # =============================================================================
