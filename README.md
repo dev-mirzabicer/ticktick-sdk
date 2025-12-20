@@ -3,6 +3,7 @@
 [![PyPI version](https://badge.fury.io/py/ticktick-sdk.svg)](https://pypi.org/project/ticktick-sdk/)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![PyPI Downloads](https://static.pepy.tech/personalized-badge/ticktick-sdk?period=total&units=INTERNATIONAL_SYSTEM&left_color=GREY&right_color=ORANGE&left_text=downloads)](https://pepy.tech/projects/ticktick-sdk)
 
 A comprehensive async Python SDK for [TickTick](https://ticktick.com) with [MCP](https://modelcontextprotocol.io/) (Model Context Protocol) server support.
 
