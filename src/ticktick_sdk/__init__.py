@@ -59,55 +59,55 @@ Architecture:
 See the README for full documentation.
 """
 
-__version__ = "0.1.0"
+__version__ = "0.2.1"
 __author__ = "dev-mirzabicer"
 
 # Main client - primary entry point for library usage
 from ticktick_sdk.client import TickTickClient
 
-# Models - data structures for tasks, projects, tags, habits, etc.
-from ticktick_sdk.models import (
-    Task,
-    ChecklistItem,
-    TaskReminder,
-    Project,
-    ProjectGroup,
-    ProjectData,
-    Column,
-    Tag,
-    User,
-    UserStatus,
-    UserStatistics,
-    Habit,
-    HabitSection,
-    HabitCheckin,
-    HabitPreferences,
+# Constants - enums and configuration values
+from ticktick_sdk.constants import (
+    ProjectKind,
+    TaskKind,
+    TaskPriority,
+    TaskStatus,
+    ViewMode,
 )
 
 # Exceptions - for error handling
 from ticktick_sdk.exceptions import (
-    TickTickError,
-    TickTickAuthenticationError,
     TickTickAPIError,
-    TickTickValidationError,
-    TickTickRateLimitError,
-    TickTickNotFoundError,
+    TickTickAuthenticationError,
     TickTickConfigurationError,
+    TickTickError,
     TickTickForbiddenError,
+    TickTickNotFoundError,
+    TickTickRateLimitError,
     TickTickServerError,
+    TickTickValidationError,
 )
 
-# Constants - enums and configuration values
-from ticktick_sdk.constants import (
-    TaskStatus,
-    TaskPriority,
-    TaskKind,
-    ProjectKind,
-    ViewMode,
+# Models - data structures for tasks, projects, tags, habits, etc.
+from ticktick_sdk.models import (
+    ChecklistItem,
+    Column,
+    Habit,
+    HabitCheckin,
+    HabitPreferences,
+    HabitSection,
+    Project,
+    ProjectData,
+    ProjectGroup,
+    Tag,
+    Task,
+    TaskReminder,
+    User,
+    UserStatistics,
+    UserStatus,
 )
 
 # Settings - configuration management
-from ticktick_sdk.settings import TickTickSettings, get_settings, configure_settings
+from ticktick_sdk.settings import TickTickSettings, configure_settings, get_settings
 
 __all__ = [
     # Version
