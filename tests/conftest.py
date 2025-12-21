@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import asyncio
 import os
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, AsyncIterator
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -1206,9 +1206,10 @@ class MockUnifiedAPI:
         self,
         habit_id: str,
         value: float = 1.0,
+        checkin_date: date | None = None,
     ) -> Habit:
         """Mock check in a habit."""
-        self._record_call("checkin_habit", (habit_id,), {"value": value})
+        self._record_call("checkin_habit", (habit_id,), {"value": value, "checkin_date": checkin_date})
         self._check_failure("checkin_habit")
 
         if habit_id not in self._habits:
@@ -1217,7 +1218,10 @@ class MockUnifiedAPI:
 
         habit = self._habits[habit_id]
         habit.total_checkins += int(value)
-        habit.current_streak += 1
+        # Only increment streak for today's check-ins (not backdated)
+        is_backdate = checkin_date is not None and checkin_date < date.today()
+        if not is_backdate:
+            habit.current_streak += 1
         return habit
 
     async def archive_habit(self, habit_id: str) -> Habit:
