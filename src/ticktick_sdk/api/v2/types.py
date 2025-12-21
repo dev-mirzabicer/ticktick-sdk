@@ -743,6 +743,27 @@ class HabitCheckinV2(TypedDict):
     status: NotRequired[int]  # 2=completed
 
 
+class HabitCheckinCreateV2(TypedDict):
+    """V2 API habit check-in create request."""
+
+    id: str  # Client-generated check-in ID (24-char hex)
+    habitId: str
+    checkinStamp: int  # YYYYMMDD - the date being checked in
+    checkinTime: str  # ISO timestamp of when check-in was made
+    opTime: str  # ISO timestamp of operation time
+    value: float
+    goal: float
+    status: int  # 2=completed
+
+
+class BatchHabitCheckinRequestV2(TypedDict, total=False):
+    """V2 API batch habit check-in request."""
+
+    add: list[HabitCheckinCreateV2]
+    update: list[HabitCheckinV2]
+    delete: list[str]  # List of check-in IDs
+
+
 class HabitCheckinResponseV2(TypedDict):
     """V2 API habit check-in query response."""
 
