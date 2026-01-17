@@ -98,6 +98,7 @@ class TaskV2(TypedDict):
     createdTime: NotRequired[str]
     modifiedTime: NotRequired[str]
     completedTime: NotRequired[str]
+    pinnedTime: NotRequired[str]
     timeZone: NotRequired[str]
     isAllDay: NotRequired[bool]
     isFloating: NotRequired[bool]
@@ -188,6 +189,8 @@ class TaskUpdateV2(TypedDict, total=False):
     items: list[ItemV2]
     sortOrder: int
     completedTime: str
+    pinnedTime: str  # ISO string to pin, None to unpin
+    columnId: str  # For kanban column assignment
 
 
 class TaskDeleteV2(TypedDict):
