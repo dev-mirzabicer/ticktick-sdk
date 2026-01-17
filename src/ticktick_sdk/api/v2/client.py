@@ -448,6 +448,8 @@ class TickTickV2Client(BaseTickTickClient):
         items: list[dict[str, Any]] | None = None,
         sort_order: int | None = None,
         completed_time: str | None = None,
+        pinned_time: str | None = None,
+        column_id: str | None = None,
     ) -> BatchResponseV2:
         """
         Update a single task.
@@ -471,6 +473,8 @@ class TickTickV2Client(BaseTickTickClient):
             items: New subtasks
             sort_order: New sort order
             completed_time: Completion time
+            pinned_time: Pin timestamp (ISO string to pin, empty string to unpin)
+            column_id: Kanban column ID to move task to
 
         Returns:
             Batch response
@@ -512,6 +516,11 @@ class TickTickV2Client(BaseTickTickClient):
             task["sortOrder"] = sort_order
         if completed_time is not None:
             task["completedTime"] = completed_time
+        if pinned_time is not None:
+            # Empty string means "clear pinned time" (unpin)
+            task["pinnedTime"] = pinned_time if pinned_time else None  # type: ignore
+        if column_id is not None:
+            task["columnId"] = column_id
 
         return await self.batch_tasks(update=[task])
 
