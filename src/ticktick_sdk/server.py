@@ -129,6 +129,7 @@ from ticktick_sdk.tools.inputs import (
     ColumnUpdateInput,
     ColumnDeleteInput,
     TaskMoveToColumnInput,
+    TasksByColumnInput,
     TagCreateInput,
     TagDeleteInput,
     TagRenameInput,
@@ -1283,6 +1284,48 @@ async def ticktick_move_task_to_column(params: TaskMoveToColumnInput, ctx: Conte
 
     except Exception as e:
         return handle_error(e, "move_task_to_column")
+
+
+@mcp.tool(
+    name="ticktick_list_tasks_by_column",
+    annotations={
+        "title": "List Tasks by Column",
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": True,
+    },
+)
+async def ticktick_list_tasks_by_column(params: TasksByColumnInput, ctx: Context) -> str:
+    """
+    List all tasks in a kanban column.
+
+    Retrieves all tasks assigned to a specific column in a kanban-view project.
+    Useful for viewing the contents of columns like "To Do", "In Progress", etc.
+
+    Args:
+        params: Query parameters:
+            - column_id (str): Column identifier (required)
+            - project_id (str): Optional project ID for filtering (default None)
+            - response_format (str): Output format - 'markdown' or 'json' (default 'markdown')
+
+    Returns:
+        Formatted list of tasks in the column or error message.
+    """
+    try:
+        client = get_client(ctx)
+        tasks = await client.get_tasks_by_column(
+            column_id=params.column_id,
+            project_id=params.project_id,
+        )
+
+        if params.response_format == ResponseFormat.MARKDOWN:
+            return format_tasks_markdown(tasks, f"Tasks in Column {params.column_id}")
+        else:
+            return json.dumps(format_tasks_json(tasks), indent=2, default=str)
+
+    except Exception as e:
+        return handle_error(e, "list_tasks_by_column")
 
 
 # =============================================================================

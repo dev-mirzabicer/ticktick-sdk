@@ -270,6 +270,33 @@ class TickTickV2Client(BaseTickTickClient):
         response = await self._get_json("/batch/check/0")
         return response
 
+    async def get_tasks_by_column(
+        self,
+        column_id: str,
+        project_id: str | None = None,
+    ) -> list[TaskV2]:
+        """
+        Get tasks assigned to a specific kanban column.
+
+        Args:
+            column_id: Column ID to filter by
+            project_id: Optional project ID for additional filtering
+
+        Returns:
+            List of tasks in the specified column
+        """
+        state = await self.sync()
+        all_tasks = state.get("syncTaskBean", {}).get("update", [])
+
+        # Filter by columnId
+        tasks = [t for t in all_tasks if t.get("columnId") == column_id]
+
+        # Optionally filter by projectId as well
+        if project_id is not None:
+            tasks = [t for t in tasks if t.get("projectId") == project_id]
+
+        return tasks
+
     # =========================================================================
     # User Endpoints
     # =========================================================================

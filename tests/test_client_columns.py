@@ -391,3 +391,87 @@ class TestKanbanWorkflow:
         columns = await client.get_columns(project.id)
         updated_col3 = next(c for c in columns if c.id == col3.id)
         assert updated_col3.sort_order == -1
+
+
+class TestGetTasksByColumn:
+    """Tests for retrieving tasks by column."""
+
+    async def test_get_tasks_by_column_basic(self, client: TickTickClient):
+        """Test getting tasks from a column."""
+        project = await client.create_project(name="Kanban Project", view_mode="kanban")
+        column = await client.create_column(project.id, "To Do")
+
+        # Create tasks and move them to the column
+        task1 = await client.create_task(title="Task 1", project_id=project.id)
+        task2 = await client.create_task(title="Task 2", project_id=project.id)
+        task3 = await client.create_task(title="Task 3", project_id=project.id)
+
+        await client.move_task_to_column(task1.id, project.id, column.id)
+        await client.move_task_to_column(task2.id, project.id, column.id)
+        await client.move_task_to_column(task3.id, project.id, column.id)
+
+        # Get tasks by column
+        tasks = await client.get_tasks_by_column(column.id)
+
+        assert len(tasks) == 3
+        task_ids = [t.id for t in tasks]
+        assert task1.id in task_ids
+        assert task2.id in task_ids
+        assert task3.id in task_ids
+
+    async def test_get_tasks_by_column_with_project(self, client: TickTickClient):
+        """Test filtering by both column and project."""
+        project1 = await client.create_project(name="Project 1", view_mode="kanban")
+        project2 = await client.create_project(name="Project 2", view_mode="kanban")
+
+        col1 = await client.create_column(project1.id, "To Do")
+        col2 = await client.create_column(project2.id, "In Progress")
+
+        # Create tasks in different projects
+        task1 = await client.create_task(title="Task 1", project_id=project1.id)
+        task2 = await client.create_task(title="Task 2", project_id=project1.id)
+        task3 = await client.create_task(title="Task 3", project_id=project2.id)
+
+        await client.move_task_to_column(task1.id, project1.id, col1.id)
+        await client.move_task_to_column(task2.id, project1.id, col1.id)
+        await client.move_task_to_column(task3.id, project2.id, col2.id)
+
+        # Get tasks from col1 with project1 filter
+        tasks = await client.get_tasks_by_column(col1.id, project_id=project1.id)
+
+        assert len(tasks) == 2
+        task_ids = [t.id for t in tasks]
+        assert task1.id in task_ids
+        assert task2.id in task_ids
+        assert task3.id not in task_ids
+
+    async def test_get_tasks_by_column_empty(self, client: TickTickClient):
+        """Test with column that has no tasks."""
+        project = await client.create_project(name="Kanban Project", view_mode="kanban")
+        column = await client.create_column(project.id, "Empty Column")
+
+        # Don't add any tasks to the column
+        tasks = await client.get_tasks_by_column(column.id)
+
+        assert tasks == []
+
+    async def test_get_tasks_by_column_invalid_column_id(self, client: TickTickClient):
+        """Test with invalid column_id returns empty list."""
+        tasks = await client.get_tasks_by_column("nonexistent_column_id")
+        assert tasks == []
+
+    @pytest.mark.mock_only
+    async def test_get_tasks_by_column_verifies_api_call(
+        self, client: TickTickClient, mock_api: MockUnifiedAPI
+    ):
+        """Test that get_tasks_by_column makes the correct API call (mock only)."""
+        project = await client.create_project(name="Kanban Project", view_mode="kanban")
+        column = await client.create_column(project.id, "To Do")
+
+        await client.get_tasks_by_column(column.id)
+
+        calls = mock_api.get_calls("list_tasks_by_column")
+        assert len(calls) == 1
+        args, kwargs = calls[0]
+        assert args == (column.id,)
+        assert kwargs.get("project_id") is None

@@ -946,6 +946,24 @@ class MockUnifiedAPI:
         task.column_id = column_id
         return task
 
+    async def list_tasks_by_column(
+        self,
+        column_id: str,
+        project_id: str | None = None,
+    ) -> list[Task]:
+        """Mock list tasks by column."""
+        self._record_call("list_tasks_by_column", (column_id,), {"project_id": project_id})
+        self._check_failure("list_tasks_by_column")
+
+        # Filter tasks by column_id
+        tasks = [t for t in self.tasks.values() if t.column_id == column_id]
+
+        # Optionally filter by project_id as well
+        if project_id is not None:
+            tasks = [t for t in tasks if t.project_id == project_id]
+
+        return tasks
+
     # -------------------------------------------------------------------------
     # Project Operations
     # -------------------------------------------------------------------------

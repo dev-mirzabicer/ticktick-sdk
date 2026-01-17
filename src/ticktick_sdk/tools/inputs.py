@@ -646,6 +646,25 @@ class TaskMoveToColumnInput(BaseMCPInput):
     )
 
 
+class TasksByColumnInput(BaseMCPInput):
+    """Input for listing tasks in a kanban column."""
+
+    column_id: str = Field(
+        ...,
+        description="Column ID to get tasks from",
+        pattern=r"^[a-f0-9]{24}$",
+    )
+    project_id: Optional[str] = Field(
+        default=None,
+        description="Optional project ID for additional filtering",
+        pattern=r"^(inbox\d+|[a-f0-9]{24})$",
+    )
+    response_format: ResponseFormat = Field(
+        default=ResponseFormat.MARKDOWN,
+        description="Output format",
+    )
+
+
 # =============================================================================
 # Tag Input Models
 # =============================================================================

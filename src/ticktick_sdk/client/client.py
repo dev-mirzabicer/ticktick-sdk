@@ -1178,6 +1178,36 @@ class TickTickClient:
         all_tasks = await self.get_all_tasks()
         return [task for task in all_tasks if task.priority == priority]
 
+    async def get_tasks_by_column(
+        self,
+        column_id: str,
+        project_id: str | None = None,
+    ) -> list[Task]:
+        """
+        Get tasks assigned to a specific kanban column.
+
+        Args:
+            column_id: Column ID to filter by
+            project_id: Optional project ID for additional filtering
+
+        Returns:
+            List of tasks in the specified column
+
+        Example:
+            # Get all tasks in a column
+            tasks = await client.get_tasks_by_column("col_123")
+
+            # Get tasks in a column from a specific project
+            tasks = await client.get_tasks_by_column(
+                column_id="col_123",
+                project_id="proj_456"
+            )
+        """
+        return await self._api.list_tasks_by_column(
+            column_id=column_id,
+            project_id=project_id,
+        )
+
     async def search_tasks(self, query: str) -> list[Task]:
         """
         Search tasks by title or content.

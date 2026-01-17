@@ -1237,6 +1237,41 @@ class UnifiedTickTickAPI:
             operation="get_project_with_data",
         )
 
+    async def list_tasks_by_column(
+        self,
+        column_id: str,
+        project_id: str | None = None,
+    ) -> list[Task]:
+        """
+        Get tasks assigned to a specific kanban column.
+
+        V2-only operation.
+
+        Args:
+            column_id: Column ID to filter by
+            project_id: Optional project ID for additional filtering
+
+        Returns:
+            List of Task objects in the column
+
+        Raises:
+            TickTickAPIUnavailableError: If V2 API unavailable
+        """
+        self._ensure_initialized()
+
+        if not self._router.has_v2:
+            raise TickTickAPIUnavailableError(
+                "Column-based task filtering requires V2 API",
+                operation="list_tasks_by_column",
+            )
+
+        tasks_v2 = await self._v2_client.get_tasks_by_column(  # type: ignore
+            column_id=column_id,
+            project_id=project_id,
+        )
+
+        return [Task.from_v2(t) for t in tasks_v2]
+
     async def create_project(
         self,
         name: str,
