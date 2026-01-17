@@ -33,6 +33,41 @@ class Column(TickTickModel):
     project_id: str = Field(alias="projectId")
     name: str
     sort_order: int | None = Field(default=None, alias="sortOrder")
+    created_time: datetime | None = Field(default=None, alias="createdTime")
+    modified_time: datetime | None = Field(default=None, alias="modifiedTime")
+    etag: str | None = None
+
+    @field_validator("created_time", "modified_time", mode="before")
+    @classmethod
+    def parse_datetime_field(cls, v: Any) -> datetime | None:
+        return cls.parse_datetime(v)
+
+    @classmethod
+    def from_v2(cls, data: dict[str, Any]) -> Self:
+        """Create from V2 API response."""
+        return cls.model_validate(data)
+
+    def to_v2_create_dict(self) -> dict[str, Any]:
+        """Convert to V2 API create format."""
+        data: dict[str, Any] = {
+            "projectId": self.project_id,
+            "name": self.name,
+        }
+        if self.sort_order is not None:
+            data["sortOrder"] = self.sort_order
+        return data
+
+    def to_v2_update_dict(self) -> dict[str, Any]:
+        """Convert to V2 API update format."""
+        data: dict[str, Any] = {
+            "id": self.id,
+            "projectId": self.project_id,
+        }
+        if self.name is not None:
+            data["name"] = self.name
+        if self.sort_order is not None:
+            data["sortOrder"] = self.sort_order
+        return data
 
 
 class ProjectGroup(TickTickModel):
