@@ -950,9 +950,11 @@ class MockUnifiedAPI:
         self,
         column_id: str,
         project_id: str | None = None,
+        limit: int | None = None,
+        offset: int | None = None,
     ) -> list[Task]:
         """Mock list tasks by column."""
-        self._record_call("list_tasks_by_column", (column_id,), {"project_id": project_id})
+        self._record_call("list_tasks_by_column", (column_id,), {"project_id": project_id, "limit": limit, "offset": offset})
         self._check_failure("list_tasks_by_column")
 
         # Filter tasks by column_id
@@ -961,6 +963,11 @@ class MockUnifiedAPI:
         # Optionally filter by project_id as well
         if project_id is not None:
             tasks = [t for t in tasks if t.project_id == project_id]
+
+        # Apply pagination
+        start = offset if offset is not None else 0
+        end = start + limit if limit is not None else None
+        tasks = tasks[start:end]
 
         return tasks
 

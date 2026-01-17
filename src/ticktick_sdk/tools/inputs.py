@@ -659,6 +659,17 @@ class TasksByColumnInput(BaseMCPInput):
         description="Optional project ID for additional filtering",
         pattern=r"^(inbox\d+|[a-f0-9]{24})$",
     )
+    limit: Optional[int] = Field(
+        default=None,
+        description="Maximum number of tasks to return (default: 50, max: 200)",
+        ge=1,
+        le=200,
+    )
+    offset: Optional[int] = Field(
+        default=None,
+        description="Number of tasks to skip (default: 0)",
+        ge=0,
+    )
     response_format: ResponseFormat = Field(
         default=ResponseFormat.MARKDOWN,
         description="Output format",

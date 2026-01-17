@@ -1307,6 +1307,8 @@ async def ticktick_list_tasks_by_column(params: TasksByColumnInput, ctx: Context
         params: Query parameters:
             - column_id (str): Column identifier (required)
             - project_id (str): Optional project ID for filtering (default None)
+            - limit (int): Maximum number of tasks to return (default: 50, max: 200)
+            - offset (int): Number of tasks to skip (default: 0)
             - response_format (str): Output format - 'markdown' or 'json' (default 'markdown')
 
     Returns:
@@ -1314,9 +1316,14 @@ async def ticktick_list_tasks_by_column(params: TasksByColumnInput, ctx: Context
     """
     try:
         client = get_client(ctx)
+        # Apply defaults for pagination parameters
+        limit = params.limit or DEFAULT_TASK_LIMIT
+        offset = params.offset if params.offset is not None else 0
         tasks = await client.get_tasks_by_column(
             column_id=params.column_id,
             project_id=params.project_id,
+            limit=limit,
+            offset=offset,
         )
 
         if params.response_format == ResponseFormat.MARKDOWN:

@@ -1241,6 +1241,8 @@ class UnifiedTickTickAPI:
         self,
         column_id: str,
         project_id: str | None = None,
+        limit: int | None = None,
+        offset: int | None = None,
     ) -> list[Task]:
         """
         Get tasks assigned to a specific kanban column.
@@ -1250,6 +1252,8 @@ class UnifiedTickTickAPI:
         Args:
             column_id: Column ID to filter by
             project_id: Optional project ID for additional filtering
+            limit: Maximum number of tasks to return
+            offset: Number of tasks to skip
 
         Returns:
             List of Task objects in the column
@@ -1268,6 +1272,8 @@ class UnifiedTickTickAPI:
         tasks_v2 = await self._v2_client.get_tasks_by_column(  # type: ignore
             column_id=column_id,
             project_id=project_id,
+            limit=limit,
+            offset=offset,
         )
 
         return [Task.from_v2(t) for t in tasks_v2]

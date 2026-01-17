@@ -274,6 +274,8 @@ class TickTickV2Client(BaseTickTickClient):
         self,
         column_id: str,
         project_id: str | None = None,
+        limit: int | None = None,
+        offset: int = 0,
     ) -> list[TaskV2]:
         """
         Get tasks assigned to a specific kanban column.
@@ -281,6 +283,8 @@ class TickTickV2Client(BaseTickTickClient):
         Args:
             column_id: Column ID to filter by
             project_id: Optional project ID for additional filtering
+            limit: Maximum number of tasks to return
+            offset: Number of tasks to skip
 
         Returns:
             List of tasks in the specified column
@@ -294,6 +298,11 @@ class TickTickV2Client(BaseTickTickClient):
         # Optionally filter by projectId as well
         if project_id is not None:
             tasks = [t for t in tasks if t.get("projectId") == project_id]
+
+        # Apply pagination
+        start = offset or 0
+        end = start + limit if limit else None
+        tasks = tasks[start:end]
 
         return tasks
 

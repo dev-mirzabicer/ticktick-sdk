@@ -1182,6 +1182,8 @@ class TickTickClient:
         self,
         column_id: str,
         project_id: str | None = None,
+        limit: int | None = None,
+        offset: int | None = None,
     ) -> list[Task]:
         """
         Get tasks assigned to a specific kanban column.
@@ -1189,6 +1191,8 @@ class TickTickClient:
         Args:
             column_id: Column ID to filter by
             project_id: Optional project ID for additional filtering
+            limit: Maximum number of tasks to return
+            offset: Number of tasks to skip
 
         Returns:
             List of tasks in the specified column
@@ -1202,10 +1206,19 @@ class TickTickClient:
                 column_id="col_123",
                 project_id="proj_456"
             )
+
+            # Get paginated tasks
+            tasks = await client.get_tasks_by_column(
+                column_id="col_123",
+                limit=10,
+                offset=20
+            )
         """
         return await self._api.list_tasks_by_column(
             column_id=column_id,
             project_id=project_id,
+            limit=limit,
+            offset=offset,
         )
 
     async def search_tasks(self, query: str) -> list[Task]:
