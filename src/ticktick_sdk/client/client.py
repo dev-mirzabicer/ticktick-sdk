@@ -16,6 +16,7 @@ from types import TracebackType
 from typing import Any, TypeVar
 
 from ticktick_sdk.models import (
+    Column,
     Task,
     Project,
     ProjectGroup,
@@ -545,6 +546,132 @@ class TickTickClient:
             folder_id: Folder ID
         """
         await self._api.delete_project_group(folder_id)
+
+    # =========================================================================
+    # Task Pinning
+    # =========================================================================
+
+    async def pin_task(self, task_id: str, project_id: str) -> Task:
+        """
+        Pin a task to keep it at the top of lists.
+
+        Args:
+            task_id: Task ID
+            project_id: Project ID
+
+        Returns:
+            Updated task with pinned_time set
+        """
+        return await self._api.pin_task(task_id, project_id)
+
+    async def unpin_task(self, task_id: str, project_id: str) -> Task:
+        """
+        Unpin a task.
+
+        Args:
+            task_id: Task ID
+            project_id: Project ID
+
+        Returns:
+            Updated task with pinned_time cleared
+        """
+        return await self._api.unpin_task(task_id, project_id)
+
+    # =========================================================================
+    # Kanban Columns
+    # =========================================================================
+
+    async def get_columns(self, project_id: str) -> list[Column]:
+        """
+        Get all kanban columns for a project.
+
+        Args:
+            project_id: Project ID
+
+        Returns:
+            List of columns
+        """
+        return await self._api.list_columns(project_id)
+
+    async def create_column(
+        self,
+        project_id: str,
+        name: str,
+        *,
+        sort_order: int | None = None,
+    ) -> Column:
+        """
+        Create a kanban column.
+
+        Args:
+            project_id: Project ID (must be a kanban-view project)
+            name: Column name
+            sort_order: Display order (lower = earlier)
+
+        Returns:
+            Created column
+        """
+        return await self._api.create_column(
+            project_id=project_id,
+            name=name,
+            sort_order=sort_order,
+        )
+
+    async def update_column(
+        self,
+        column_id: str,
+        project_id: str,
+        *,
+        name: str | None = None,
+        sort_order: int | None = None,
+    ) -> Column:
+        """
+        Update a kanban column.
+
+        Args:
+            column_id: Column ID
+            project_id: Project ID
+            name: New name
+            sort_order: New sort order
+
+        Returns:
+            Updated column
+        """
+        return await self._api.update_column(
+            column_id=column_id,
+            project_id=project_id,
+            name=name,
+            sort_order=sort_order,
+        )
+
+    async def delete_column(self, column_id: str, project_id: str) -> None:
+        """
+        Delete a kanban column.
+
+        Args:
+            column_id: Column ID
+            project_id: Project ID
+        """
+        await self._api.delete_column(column_id, project_id)
+
+    async def move_task_to_column(
+        self,
+        task_id: str,
+        project_id: str,
+        column_id: str | None,
+    ) -> Task:
+        """
+        Move a task to a kanban column.
+
+        Args:
+            task_id: Task ID
+            project_id: Project ID
+            column_id: Target column ID (None to remove from column)
+
+        Returns:
+            Updated task
+        """
+        return await self._api.move_task_to_column(task_id, project_id, column_id)
 
     # =========================================================================
     # Tags
