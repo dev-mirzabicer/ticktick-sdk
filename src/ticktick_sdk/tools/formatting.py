@@ -11,7 +11,7 @@ import json
 from datetime import datetime
 from typing import Any
 
-from ticktick_sdk.models import Task, Project, ProjectGroup, Tag, User, UserStatus, UserStatistics
+from ticktick_sdk.models import Column, Task, Project, ProjectGroup, Tag, User, UserStatus, UserStatistics
 from ticktick_sdk.tools.inputs import ResponseFormat
 
 # Maximum response size in characters
@@ -306,6 +306,52 @@ def format_folders_json(folders: list[ProjectGroup]) -> dict[str, Any]:
     return {
         "count": len(folders),
         "folders": [format_folder_json(f) for f in folders],
+    }
+
+
+# =============================================================================
+# Column Formatting (Kanban)
+# =============================================================================
+
+
+def format_column_markdown(column: Column) -> str:
+    """Format a single column as Markdown."""
+    return f"- **{column.name}** (`{column.id}`) - Sort: {column.sort_order or 0}"
+
+
+def format_column_json(column: Column) -> dict[str, Any]:
+    """Format a single column as JSON."""
+    return {
+        "id": column.id,
+        "project_id": column.project_id,
+        "name": column.name,
+        "sort_order": column.sort_order,
+        "created_time": column.created_time.isoformat() if column.created_time else None,
+        "modified_time": column.modified_time.isoformat() if column.modified_time else None,
+        "etag": column.etag,
+    }
+
+
+def format_columns_markdown(columns: list[Column], title: str = "Kanban Columns") -> str:
+    """Format multiple columns as Markdown."""
+    if not columns:
+        return f"# {title}\n\nNo columns found."
+
+    lines = [f"# {title}", "", f"Found {len(columns)} column(s):", ""]
+
+    # Sort by sort_order for display
+    sorted_columns = sorted(columns, key=lambda c: c.sort_order or 0)
+    for column in sorted_columns:
+        lines.append(format_column_markdown(column))
+
+    return "\n".join(lines)
+
+
+def format_columns_json(columns: list[Column]) -> dict[str, Any]:
+    """Format multiple columns as JSON."""
+    return {
+        "count": len(columns),
+        "columns": [format_column_json(c) for c in columns],
     }
 
 
