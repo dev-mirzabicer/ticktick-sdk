@@ -113,6 +113,7 @@ from ticktick_sdk.tools.inputs import (
     TaskParentInput,
     TaskUnparentInput,
     TaskListInput,
+    TaskPinInput,
     CompletedTasksInput,
     AbandonedTasksInput,
     DeletedTasksInput,
@@ -123,6 +124,11 @@ from ticktick_sdk.tools.inputs import (
     FolderCreateInput,
     FolderDeleteInput,
     FolderRenameInput,
+    ColumnListInput,
+    ColumnCreateInput,
+    ColumnUpdateInput,
+    ColumnDeleteInput,
+    TaskMoveToColumnInput,
     TagCreateInput,
     TagDeleteInput,
     TagRenameInput,
@@ -155,6 +161,10 @@ from ticktick_sdk.tools.formatting import (
     format_tags_json,
     format_folders_markdown,
     format_folders_json,
+    format_column_markdown,
+    format_column_json,
+    format_columns_markdown,
+    format_columns_json,
     format_user_markdown,
     format_user_status_markdown,
     format_statistics_markdown,
@@ -1021,6 +1031,258 @@ async def ticktick_search_tasks(params: SearchInput, ctx: Context) -> str:
 
     except Exception as e:
         return handle_error(e, "search_tasks")
+
+
+# =============================================================================
+# Task Pinning Tools
+# =============================================================================
+
+
+@mcp.tool(
+    name="ticktick_pin_task",
+    annotations={
+        "title": "Pin/Unpin Task",
+        "readOnlyHint": False,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": False,
+    },
+)
+async def ticktick_pin_task(params: TaskPinInput, ctx: Context) -> str:
+    """
+    Pin or unpin a task.
+
+    Pinned tasks appear at the top of task lists in TickTick.
+    Pinning sets the pinnedTime to the current timestamp.
+    Unpinning clears the pinnedTime field.
+
+    Args:
+        params: Task pin input with task_id, project_id, and pin boolean
+
+    Returns:
+        Updated task details
+    """
+    try:
+        client = get_client(ctx)
+
+        if params.pin:
+            task = await client.pin_task(params.task_id, params.project_id)
+            action = "pinned"
+        else:
+            task = await client.unpin_task(params.task_id, params.project_id)
+            action = "unpinned"
+
+        if params.response_format == ResponseFormat.MARKDOWN:
+            return f"**Success**: Task '{task.title}' has been {action}.\n\n" + format_task_markdown(task)
+        else:
+            result = format_task_json(task)
+            result["action"] = action
+            return json.dumps(result, indent=2, default=str)
+
+    except Exception as e:
+        return handle_error(e, "pin_task")
+
+
+# =============================================================================
+# Kanban Column Tools
+# =============================================================================
+
+
+@mcp.tool(
+    name="ticktick_list_columns",
+    annotations={
+        "title": "List Kanban Columns",
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": False,
+    },
+)
+async def ticktick_list_columns(params: ColumnListInput, ctx: Context) -> str:
+    """
+    List all kanban columns for a project.
+
+    Returns the columns in a kanban-view project, sorted by display order.
+    Only kanban-view projects have columns.
+
+    Args:
+        params: Column list input with project_id
+
+    Returns:
+        List of columns
+    """
+    try:
+        client = get_client(ctx)
+        columns = await client.get_columns(params.project_id)
+
+        if params.response_format == ResponseFormat.MARKDOWN:
+            return format_columns_markdown(columns)
+        else:
+            return json.dumps(format_columns_json(columns), indent=2, default=str)
+
+    except Exception as e:
+        return handle_error(e, "list_columns")
+
+
+@mcp.tool(
+    name="ticktick_create_column",
+    annotations={
+        "title": "Create Kanban Column",
+        "readOnlyHint": False,
+        "destructiveHint": False,
+        "idempotentHint": False,
+        "openWorldHint": True,
+    },
+)
+async def ticktick_create_column(params: ColumnCreateInput, ctx: Context) -> str:
+    """
+    Create a new kanban column in a project.
+
+    Columns organize tasks in kanban-view projects. Common column names
+    include "To Do", "In Progress", "Review", and "Done".
+
+    Args:
+        params: Column create input with project_id, name, and optional sort_order
+
+    Returns:
+        Created column details
+    """
+    try:
+        client = get_client(ctx)
+        column = await client.create_column(
+            project_id=params.project_id,
+            name=params.name,
+            sort_order=params.sort_order,
+        )
+
+        if params.response_format == ResponseFormat.MARKDOWN:
+            return f"**Success**: Created column '{column.name}'\n\n" + format_column_markdown(column)
+        else:
+            result = format_column_json(column)
+            result["action"] = "created"
+            return json.dumps(result, indent=2, default=str)
+
+    except Exception as e:
+        return handle_error(e, "create_column")
+
+
+@mcp.tool(
+    name="ticktick_update_column",
+    annotations={
+        "title": "Update Kanban Column",
+        "readOnlyHint": False,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": False,
+    },
+)
+async def ticktick_update_column(params: ColumnUpdateInput, ctx: Context) -> str:
+    """
+    Update a kanban column's name or sort order.
+
+    Args:
+        params: Column update input with column_id, project_id, and optional name/sort_order
+
+    Returns:
+        Updated column details
+    """
+    try:
+        client = get_client(ctx)
+        column = await client.update_column(
+            column_id=params.column_id,
+            project_id=params.project_id,
+            name=params.name,
+            sort_order=params.sort_order,
+        )
+
+        if params.response_format == ResponseFormat.MARKDOWN:
+            return f"**Success**: Updated column '{column.name}'\n\n" + format_column_markdown(column)
+        else:
+            result = format_column_json(column)
+            result["action"] = "updated"
+            return json.dumps(result, indent=2, default=str)
+
+    except Exception as e:
+        return handle_error(e, "update_column")
+
+
+@mcp.tool(
+    name="ticktick_delete_column",
+    annotations={
+        "title": "Delete Kanban Column",
+        "readOnlyHint": False,
+        "destructiveHint": True,
+        "idempotentHint": False,
+        "openWorldHint": False,
+    },
+)
+async def ticktick_delete_column(params: ColumnDeleteInput, ctx: Context) -> str:
+    """
+    Delete a kanban column.
+
+    Warning: Tasks in this column will become unassigned to any column.
+    This operation cannot be undone.
+
+    Args:
+        params: Column delete input with column_id and project_id
+
+    Returns:
+        Confirmation message
+    """
+    try:
+        client = get_client(ctx)
+        await client.delete_column(params.column_id, params.project_id)
+        return f"**Success**: Deleted column `{params.column_id}`"
+
+    except Exception as e:
+        return handle_error(e, "delete_column")
+
+
+@mcp.tool(
+    name="ticktick_move_task_to_column",
+    annotations={
+        "title": "Move Task to Kanban Column",
+        "readOnlyHint": False,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": False,
+    },
+)
+async def ticktick_move_task_to_column(params: TaskMoveToColumnInput, ctx: Context) -> str:
+    """
+    Move a task to a kanban column.
+
+    Use this to organize tasks within a kanban board. Set column_id to None
+    to remove a task from its current column.
+
+    Args:
+        params: Move input with task_id, project_id, and column_id
+
+    Returns:
+        Updated task details
+    """
+    try:
+        client = get_client(ctx)
+        task = await client.move_task_to_column(
+            task_id=params.task_id,
+            project_id=params.project_id,
+            column_id=params.column_id,
+        )
+
+        if params.column_id:
+            action = f"moved to column `{params.column_id}`"
+        else:
+            action = "removed from column"
+
+        if params.response_format == ResponseFormat.MARKDOWN:
+            return f"**Success**: Task '{task.title}' {action}\n\n" + format_task_markdown(task)
+        else:
+            result = format_task_json(task)
+            result["action"] = action
+            return json.dumps(result, indent=2, default=str)
+
+    except Exception as e:
+        return handle_error(e, "move_task_to_column")
 
 
 # =============================================================================

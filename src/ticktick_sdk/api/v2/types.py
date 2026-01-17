@@ -98,6 +98,7 @@ class TaskV2(TypedDict):
     createdTime: NotRequired[str]
     modifiedTime: NotRequired[str]
     completedTime: NotRequired[str]
+    pinnedTime: NotRequired[str]
     timeZone: NotRequired[str]
     isAllDay: NotRequired[bool]
     isFloating: NotRequired[bool]
@@ -188,6 +189,8 @@ class TaskUpdateV2(TypedDict, total=False):
     items: list[ItemV2]
     sortOrder: int
     completedTime: str
+    pinnedTime: str  # ISO string to pin, None to unpin
+    columnId: str  # For kanban column assignment
 
 
 class TaskDeleteV2(TypedDict):
@@ -344,6 +347,55 @@ class ProjectGroupUpdateV2(TypedDict, total=False):
     id: str  # Required
     name: str  # Required
     listType: str  # Always "group"
+
+
+# =============================================================================
+# Kanban Column
+# =============================================================================
+
+
+class ColumnV2(TypedDict):
+    """V2 API kanban column response."""
+
+    id: str
+    projectId: str
+    name: str
+    sortOrder: NotRequired[int]
+    createdTime: NotRequired[str]
+    modifiedTime: NotRequired[str]
+    etag: NotRequired[str]
+
+
+class ColumnCreateV2(TypedDict, total=False):
+    """V2 API column creation request."""
+
+    projectId: str  # Required
+    name: str  # Required
+    sortOrder: int
+
+
+class ColumnUpdateV2(TypedDict, total=False):
+    """V2 API column update request."""
+
+    id: str  # Required
+    projectId: str  # Required
+    name: str
+    sortOrder: int
+
+
+class ColumnDeleteV2(TypedDict):
+    """V2 API column deletion request."""
+
+    columnId: str
+    projectId: str
+
+
+class BatchColumnRequestV2(TypedDict, total=False):
+    """V2 API batch column request."""
+
+    add: list[ColumnCreateV2]
+    update: list[ColumnUpdateV2]
+    delete: list[ColumnDeleteV2]
 
 
 # =============================================================================

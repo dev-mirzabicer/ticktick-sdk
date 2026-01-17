@@ -60,6 +60,7 @@ import httpx
 from ticktick_sdk.api.base import BaseTickTickClient
 from ticktick_sdk.api.v2.auth import SessionHandler, SessionToken
 from ticktick_sdk.api.v2.types import (
+    BatchColumnRequestV2,
     BatchHabitCheckinRequestV2,
     BatchHabitRequestV2,
     BatchResponseV2,
@@ -68,6 +69,10 @@ from ticktick_sdk.api.v2.types import (
     BatchProjectRequestV2,
     BatchProjectGroupRequestV2,
     BatchTagRequestV2,
+    ColumnCreateV2,
+    ColumnDeleteV2,
+    ColumnUpdateV2,
+    ColumnV2,
     FocusDistributionV2,
     FocusHeatmapV2,
     HabitCheckinCreateV2,
@@ -443,6 +448,8 @@ class TickTickV2Client(BaseTickTickClient):
         items: list[dict[str, Any]] | None = None,
         sort_order: int | None = None,
         completed_time: str | None = None,
+        pinned_time: str | None = None,
+        column_id: str | None = None,
     ) -> BatchResponseV2:
         """
         Update a single task.
@@ -466,6 +473,8 @@ class TickTickV2Client(BaseTickTickClient):
             items: New subtasks
             sort_order: New sort order
             completed_time: Completion time
+            pinned_time: Pin timestamp (ISO string to pin, empty string to unpin)
+            column_id: Kanban column ID to move task to
 
         Returns:
             Batch response
@@ -507,6 +516,11 @@ class TickTickV2Client(BaseTickTickClient):
             task["sortOrder"] = sort_order
         if completed_time is not None:
             task["completedTime"] = completed_time
+        if pinned_time is not None:
+            # Empty string means "clear pinned time" (unpin)
+            task["pinnedTime"] = pinned_time if pinned_time else None  # type: ignore
+        if column_id is not None:
+            task["columnId"] = column_id
 
         return await self.batch_tasks(update=[task])
 
@@ -892,6 +906,124 @@ class TickTickV2Client(BaseTickTickClient):
             Batch response
         """
         return await self.batch_project_groups(delete=[group_id])
+
+    # =========================================================================
+    # Column Endpoints (Kanban)
+    # =========================================================================
+
+    async def get_columns(self, project_id: str) -> list[ColumnV2]:
+        """
+        Get all columns for a project.
+
+        Args:
+            project_id: Project ID
+
+        Returns:
+            List of columns
+        """
+        endpoint = f"/column/project/{project_id}"
+        response = await self._get_json(endpoint)
+        return response
+
+    async def batch_columns(
+        self,
+        add: list[ColumnCreateV2] | None = None,
+        update: list[ColumnUpdateV2] | None = None,
+        delete: list[ColumnDeleteV2] | None = None,
+    ) -> BatchResponseV2:
+        """
+        Batch create, update, and delete columns.
+
+        Args:
+            add: Columns to create
+            update: Columns to update
+            delete: Columns to delete (each with columnId and projectId)
+
+        Returns:
+            Batch response
+        """
+        data: BatchColumnRequestV2 = {
+            "add": add or [],
+            "update": update or [],
+            "delete": delete or [],
+        }
+        response = await self._post_json("/column", json_data=data)
+        return response
+
+    async def create_column(
+        self,
+        project_id: str,
+        name: str,
+        *,
+        sort_order: int | None = None,
+    ) -> BatchResponseV2:
+        """
+        Create a kanban column.
+
+        Args:
+            project_id: Project ID
+            name: Column name
+            sort_order: Display order
+
+        Returns:
+            Batch response
+        """
+        column: ColumnCreateV2 = {
+            "projectId": project_id,
+            "name": name,
+        }
+        if sort_order is not None:
+            column["sortOrder"] = sort_order
+
+        return await self.batch_columns(add=[column])
+
+    async def update_column(
+        self,
+        column_id: str,
+        project_id: str,
+        *,
+        name: str | None = None,
+        sort_order: int | None = None,
+    ) -> BatchResponseV2:
+        """
+        Update a kanban column.
+
+        Args:
+            column_id: Column ID
+            project_id: Project ID
+            name: New name
+            sort_order: New sort order
+
+        Returns:
+            Batch response
+        """
+        column: ColumnUpdateV2 = {
+            "id": column_id,
+            "projectId": project_id,
+        }
+        if name is not None:
+            column["name"] = name
+        if sort_order is not None:
+            column["sortOrder"] = sort_order
+
+        return await self.batch_columns(update=[column])
+
+    async def delete_column(self, column_id: str, project_id: str) -> BatchResponseV2:
+        """
+        Delete a kanban column.
+
+        Args:
+            column_id: Column ID
+            project_id: Project ID the column belongs to
+
+        Returns:
+            Batch response
+        """
+        delete_item: ColumnDeleteV2 = {
+            "columnId": column_id,
+            "projectId": project_id,
+        }
+        return await self.batch_columns(delete=[delete_item])
 
     # =========================================================================
     # Tag Endpoints

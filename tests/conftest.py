@@ -581,6 +581,9 @@ class MockUnifiedAPI:
         self.abandoned_tasks: list = []  # Raw dict data for abandoned tasks
         self.deleted_tasks: list = []    # Raw dict data for deleted tasks
 
+        # Column data (kanban)
+        self._columns: dict[str, list[Column]] = {}  # project_id -> columns
+
         # Habit data
         self._habits: dict[str, Habit] = {}
         self._habit_sections: list[HabitSection] = [
@@ -822,6 +825,126 @@ class MockUnifiedAPI:
 
         # Clear parent reference
         task.parent_id = None
+
+    # -------------------------------------------------------------------------
+    # Task Pinning Operations
+    # -------------------------------------------------------------------------
+
+    async def pin_task(self, task_id: str, project_id: str) -> Task:
+        """Mock pin task."""
+        self._record_call("pin_task", (task_id, project_id), {})
+        self._check_failure("pin_task")
+
+        if task_id not in self.tasks:
+            from ticktick_sdk.exceptions import TickTickNotFoundError
+            raise TickTickNotFoundError(f"Task not found: {task_id}")
+
+        task = self.tasks[task_id]
+        task.pinned_time = datetime.now(timezone.utc)
+        return task
+
+    async def unpin_task(self, task_id: str, project_id: str) -> Task:
+        """Mock unpin task."""
+        self._record_call("unpin_task", (task_id, project_id), {})
+        self._check_failure("unpin_task")
+
+        if task_id not in self.tasks:
+            from ticktick_sdk.exceptions import TickTickNotFoundError
+            raise TickTickNotFoundError(f"Task not found: {task_id}")
+
+        task = self.tasks[task_id]
+        task.pinned_time = None
+        return task
+
+    # -------------------------------------------------------------------------
+    # Column Operations (Kanban)
+    # -------------------------------------------------------------------------
+
+    async def list_columns(self, project_id: str) -> list[Column]:
+        """Mock list columns."""
+        self._record_call("list_columns", (project_id,), {})
+        self._check_failure("list_columns")
+        return self._columns.get(project_id, [])
+
+    async def create_column(
+        self,
+        project_id: str,
+        name: str,
+        *,
+        sort_order: int | None = None,
+    ) -> Column:
+        """Mock create column."""
+        self._record_call("create_column", (project_id, name), {"sort_order": sort_order})
+        self._check_failure("create_column")
+
+        column = Column(
+            id=IDGenerator.next_id(),
+            project_id=project_id,
+            name=name,
+            sort_order=sort_order or 0,
+        )
+
+        if project_id not in self._columns:
+            self._columns[project_id] = []
+        self._columns[project_id].append(column)
+        return column
+
+    async def update_column(
+        self,
+        column_id: str,
+        project_id: str,
+        *,
+        name: str | None = None,
+        sort_order: int | None = None,
+    ) -> Column:
+        """Mock update column."""
+        self._record_call("update_column", (column_id, project_id), {
+            "name": name, "sort_order": sort_order
+        })
+        self._check_failure("update_column")
+
+        if project_id not in self._columns:
+            from ticktick_sdk.exceptions import TickTickNotFoundError
+            raise TickTickNotFoundError(f"Column not found: {column_id}")
+
+        for column in self._columns[project_id]:
+            if column.id == column_id:
+                if name is not None:
+                    column.name = name
+                if sort_order is not None:
+                    column.sort_order = sort_order
+                return column
+
+        from ticktick_sdk.exceptions import TickTickNotFoundError
+        raise TickTickNotFoundError(f"Column not found: {column_id}")
+
+    async def delete_column(self, column_id: str, project_id: str) -> None:
+        """Mock delete column."""
+        self._record_call("delete_column", (column_id, project_id), {})
+        self._check_failure("delete_column")
+
+        if project_id in self._columns:
+            self._columns[project_id] = [
+                c for c in self._columns[project_id] if c.id != column_id
+            ]
+
+    async def move_task_to_column(
+        self,
+        task_id: str,
+        project_id: str,
+        column_id: str | None,
+    ) -> Task:
+        """Mock move task to column."""
+        self._record_call("move_task_to_column", (task_id, project_id, column_id), {})
+        self._check_failure("move_task_to_column")
+
+        if task_id not in self.tasks:
+            from ticktick_sdk.exceptions import TickTickNotFoundError
+            raise TickTickNotFoundError(f"Task not found: {task_id}")
+
+        task = self.tasks[task_id]
+        task.column_id = column_id
+        return task
 
     # -------------------------------------------------------------------------
     # Project Operations

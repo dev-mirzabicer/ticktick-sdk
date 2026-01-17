@@ -508,6 +508,145 @@ class FolderRenameInput(BaseMCPInput):
 
 
 # =============================================================================
+# Task Pinning Input Models
+# =============================================================================
+
+
+class TaskPinInput(BaseMCPInput):
+    """Input for pinning or unpinning a task."""
+
+    task_id: str = Field(
+        ...,
+        description="Task identifier to pin/unpin",
+        pattern=r"^[a-f0-9]{24}$",
+    )
+    project_id: str = Field(
+        ...,
+        description="Project ID the task belongs to",
+        pattern=r"^(inbox\d+|[a-f0-9]{24})$",
+    )
+    pin: bool = Field(
+        default=True,
+        description="True to pin the task, False to unpin it",
+    )
+    response_format: ResponseFormat = Field(
+        default=ResponseFormat.MARKDOWN,
+        description="Output format",
+    )
+
+
+# =============================================================================
+# Column Input Models (Kanban)
+# =============================================================================
+
+
+class ColumnListInput(BaseMCPInput):
+    """Input for listing kanban columns."""
+
+    project_id: str = Field(
+        ...,
+        description="Project ID to get columns for (must be a kanban-view project)",
+        pattern=r"^(inbox\d+|[a-f0-9]{24})$",
+    )
+    response_format: ResponseFormat = Field(
+        default=ResponseFormat.MARKDOWN,
+        description="Output format",
+    )
+
+
+class ColumnCreateInput(BaseMCPInput):
+    """Input for creating a kanban column."""
+
+    project_id: str = Field(
+        ...,
+        description="Project ID to create column in",
+        pattern=r"^[a-f0-9]{24}$",
+    )
+    name: str = Field(
+        ...,
+        description="Column name (e.g., 'To Do', 'In Progress', 'Done')",
+        min_length=1,
+        max_length=100,
+    )
+    sort_order: Optional[int] = Field(
+        default=None,
+        description="Display order (lower numbers appear first)",
+    )
+    response_format: ResponseFormat = Field(
+        default=ResponseFormat.MARKDOWN,
+        description="Output format",
+    )
+
+
+class ColumnUpdateInput(BaseMCPInput):
+    """Input for updating a kanban column."""
+
+    column_id: str = Field(
+        ...,
+        description="Column identifier to update",
+        pattern=r"^[a-f0-9]{24}$",
+    )
+    project_id: str = Field(
+        ...,
+        description="Project ID the column belongs to",
+        pattern=r"^[a-f0-9]{24}$",
+    )
+    name: Optional[str] = Field(
+        default=None,
+        description="New column name",
+        min_length=1,
+        max_length=100,
+    )
+    sort_order: Optional[int] = Field(
+        default=None,
+        description="New display order",
+    )
+    response_format: ResponseFormat = Field(
+        default=ResponseFormat.MARKDOWN,
+        description="Output format",
+    )
+
+
+class ColumnDeleteInput(BaseMCPInput):
+    """Input for deleting a kanban column."""
+
+    column_id: str = Field(
+        ...,
+        description="Column identifier to delete",
+        pattern=r"^[a-f0-9]{24}$",
+    )
+    project_id: str = Field(
+        ...,
+        description="Project ID the column belongs to",
+        pattern=r"^[a-f0-9]{24}$",
+    )
+
+
+class TaskMoveToColumnInput(BaseMCPInput):
+    """Input for moving a task to a kanban column."""
+
+    task_id: str = Field(
+        ...,
+        description="Task identifier to move",
+        pattern=r"^[a-f0-9]{24}$",
+    )
+    project_id: str = Field(
+        ...,
+        description="Project ID the task belongs to",
+        pattern=r"^(inbox\d+|[a-f0-9]{24})$",
+    )
+    column_id: Optional[str] = Field(
+        default=None,
+        description="Target column ID (None to remove from any column)",
+        pattern=r"^[a-f0-9]{24}$",
+    )
+    response_format: ResponseFormat = Field(
+        default=ResponseFormat.MARKDOWN,
+        description="Output format",
+    )
+
+
+# =============================================================================
 # Tag Input Models
 # =============================================================================
 

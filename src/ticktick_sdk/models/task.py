@@ -10,7 +10,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Self
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import Field, field_validator
 
 from ticktick_sdk.constants import (
     TaskKind,
@@ -96,6 +96,7 @@ class Task(TickTickModel):
     created_time: datetime | None = Field(default=None, alias="createdTime")
     modified_time: datetime | None = Field(default=None, alias="modifiedTime")
     completed_time: datetime | None = Field(default=None, alias="completedTime")
+    pinned_time: datetime | None = Field(default=None, alias="pinnedTime")
     time_zone: str | None = Field(default=None, alias="timeZone")
     is_all_day: bool | None = Field(default=None, alias="isAllDay")
     is_floating: bool = Field(default=False, alias="isFloating")
@@ -144,6 +145,7 @@ class Task(TickTickModel):
         "created_time",
         "modified_time",
         "completed_time",
+        "pinned_time",
         "remind_time",
         "repeat_first_date",
         mode="before",
@@ -221,6 +223,11 @@ class Task(TickTickModel):
             return TaskPriority(self.priority).to_string()
         except ValueError:
             return "none"
+
+    @property
+    def is_pinned(self) -> bool:
+        """Check if the task is pinned."""
+        return self.pinned_time is not None
 
     # V1/V2 conversion methods
     @classmethod
@@ -335,5 +342,11 @@ class Task(TickTickModel):
             data["parentId"] = self.parent_id
         if self.completed_time is not None:
             data["completedTime"] = self.format_datetime(self.completed_time, "v2")
+
+        # Pinned time: for updates, None means "clear pinned"; for creates, None means "omit"
+        if self.pinned_time is not None:
+            data["pinnedTime"] = self.format_datetime(self.pinned_time, "v2")
+        elif for_update:
+            data["pinnedTime"] = None
 
         return data

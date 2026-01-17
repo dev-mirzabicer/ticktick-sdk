@@ -11,7 +11,7 @@ and converts between unified models and API-specific formats.
 from __future__ import annotations
 
 import logging
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from types import TracebackType
 from typing import Any, TypeVar
 
@@ -28,6 +28,7 @@ from ticktick_sdk.exceptions import (
     TickTickQuotaExceededError,
 )
 from ticktick_sdk.models import (
+    Column,
     Task,
     Project,
     ProjectGroup,
@@ -839,6 +840,259 @@ class UnifiedTickTickAPI:
             )
 
         await self._v2_client.unset_task_parent(task_id, project_id, parent_id)  # type: ignore
+
+    # =========================================================================
+    # Task Pinning Operations (V2 only)
+    # =========================================================================
+
+    async def pin_task(self, task_id: str, project_id: str) -> Task:
+        """
+        Pin a task to the top.
+
+        Pinned tasks appear at the top of task lists in TickTick.
+
+        Args:
+            task_id: Task ID
+            project_id: Project ID
+
+        Returns:
+            Updated task with pinned_time set
+        """
+        self._ensure_initialized()
+        if not self._router.has_v2:  # type: ignore
+            raise TickTickAPIUnavailableError(
+                "Task pinning requires V2 API",
+                details={"operation": "pin_task"},
+            )
+
+        # Get current task to ensure it exists
+        task = await self.get_task(task_id, project_id)
+
+        # Set pinned_time to current timestamp in TickTick format
+        now = datetime.now(timezone.utc)
+        pinned_time_str = now.strftime("%Y-%m-%dT%H:%M:%S.000+0000")
+
+        await self._v2_client.update_task(  # type: ignore
+            task_id=task_id,
+            project_id=project_id,
+            pinned_time=pinned_time_str,
+        )
+
+        # Update task object
+        task.pinned_time = now
+        return task
+
+    async def unpin_task(self, task_id: str, project_id: str) -> Task:
+        """
+        Unpin a task.
+
+        Args:
+            task_id: Task ID
+            project_id: Project ID
+
+        Returns:
+            Updated task with pinned_time cleared
+        """
+        self._ensure_initialized()
+        if not self._router.has_v2:  # type: ignore
+            raise TickTickAPIUnavailableError(
+                "Task unpinning requires V2 API",
+                details={"operation": "unpin_task"},
+            )
+
+        # Get current task to ensure it exists
+        task = await self.get_task(task_id, project_id)
+
+        # Clear pinned_time by sending empty string
+        await self._v2_client.update_task(  # type: ignore
+            task_id=task_id,
+            project_id=project_id,
+            pinned_time="",  # Empty string signals "clear"
+        )
+
+        # Update task object
+        task.pinned_time = None
+        return task
+
+    # =========================================================================
+    # Column Operations (Kanban, V2 only)
+    # =========================================================================
+
+    async def list_columns(self, project_id: str) -> list[Column]:
+        """
+        Get all columns for a project.
+
+        Args:
+            project_id: Project ID
+
+        Returns:
+            List of Column objects
+        """
+        self._ensure_initialized()
+        if not self._router.has_v2:  # type: ignore
+            raise TickTickAPIUnavailableError(
+                "Column operations require V2 API",
+                details={"operation": "list_columns"},
+            )
+
+        columns_data = await self._v2_client.get_columns(project_id)  # type: ignore
+        return [Column.from_v2(c) for c in columns_data]
+
+    async def create_column(
+        self,
+        project_id: str,
+        name: str,
+        *,
+        sort_order: int | None = None,
+    ) -> Column:
+        """
+        Create a kanban column.
+
+        Args:
+            project_id: Project ID
+            name: Column name
+            sort_order: Display order (lower = earlier)
+
+        Returns:
+            Created column
+        """
+        self._ensure_initialized()
+        if not self._router.has_v2:  # type: ignore
+            raise TickTickAPIUnavailableError(
+                "Column operations require V2 API",
+                details={"operation": "create_column"},
+            )
+
+        response = await self._v2_client.create_column(  # type: ignore
+            project_id=project_id,
+            name=name,
+            sort_order=sort_order,
+        )
+
+        # Get the created column ID from response
+        id2etag = response.get("id2etag", {})
+        if not id2etag:
+            raise TickTickAPIError(
+                "Failed to create column: no ID returned",
+                details={"project_id": project_id, "name": name},
+            )
+
+        column_id = list(id2etag.keys())[0]
+
+        # Fetch the full column data
+        columns = await self.list_columns(project_id)
+        for col in columns:
+            if col.id == column_id:
+                return col
+
+        # Fallback: construct from known data
+        return Column(
+            id=column_id,
+            project_id=project_id,
+            name=name,
+            sort_order=sort_order,
+        )
+
+    async def update_column(
+        self,
+        column_id: str,
+        project_id: str,
+        *,
+        name: str | None = None,
+        sort_order: int | None = None,
+    ) -> Column:
+        """
+        Update a kanban column.
+
+        Args:
+            column_id: Column ID
+            project_id: Project ID
+            name: New name
+            sort_order: New sort order
+
+        Returns:
+            Updated column
+        """
+        self._ensure_initialized()
+        if not self._router.has_v2:  # type: ignore
+            raise TickTickAPIUnavailableError(
+                "Column operations require V2 API",
+                details={"operation": "update_column"},
+            )
+
+        await self._v2_client.update_column(  # type: ignore
+            column_id=column_id,
+            project_id=project_id,
+            name=name,
+            sort_order=sort_order,
+        )
+
+        # Fetch updated column
+        columns = await self.list_columns(project_id)
+        for col in columns:
+            if col.id == column_id:
+                return col
+
+        raise TickTickNotFoundError(
+            f"Column not found after update: {column_id}",
+            details={"column_id": column_id, "project_id": project_id},
+        )
+
+    async def delete_column(self, column_id: str, project_id: str) -> None:
+        """
+        Delete a kanban column.
+
+        Note: Tasks in this column will become unassigned to any column.
+
+        Args:
+            column_id: Column ID
+            project_id: Project ID (for validation)
+        """
+        self._ensure_initialized()
+        if not self._router.has_v2:  # type: ignore
+            raise TickTickAPIUnavailableError(
+                "Column operations require V2 API",
+                details={"operation": "delete_column"},
+            )
+
+        await self._v2_client.delete_column(column_id, project_id)  # type: ignore
+
+    async def move_task_to_column(
+        self,
+        task_id: str,
+        project_id: str,
+        column_id: str | None,
+    ) -> Task:
+        """
+        Move a task to a kanban column.
+
+        Args:
+            task_id: Task ID
+            project_id: Project ID
+            column_id: Target column ID (None to remove from column)
+
+        Returns:
+            Updated task
+        """
+        self._ensure_initialized()
+        if not self._router.has_v2:  # type: ignore
+            raise TickTickAPIUnavailableError(
+                "Column operations require V2 API",
+                details={"operation": "move_task_to_column"},
+            )
+
+        # Get current task
+        task = await self.get_task(task_id, project_id)
+
+        # Update column_id
+        await self._v2_client.update_task(  # type: ignore
+            task_id=task_id,
+            project_id=project_id,
+            column_id=column_id if column_id else "",  # Empty string to clear
+        )
+
+        task.column_id = column_id
+        return task
 
     # =========================================================================
     # Project Operations
