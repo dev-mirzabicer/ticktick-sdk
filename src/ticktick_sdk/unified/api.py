@@ -455,6 +455,7 @@ class UnifiedTickTickAPI:
         *,
         content: str | None = None,
         desc: str | None = None,
+        kind: str | None = None,
         priority: int | None = None,
         start_date: datetime | None = None,
         due_date: datetime | None = None,
@@ -475,6 +476,7 @@ class UnifiedTickTickAPI:
             project_id: Project ID (defaults to inbox)
             content: Task content
             desc: Checklist description
+            kind: Task type (TEXT, NOTE, CHECKLIST)
             priority: Priority (0, 1, 3, 5)
             start_date: Start date
             due_date: Due date
@@ -523,6 +525,7 @@ class UnifiedTickTickAPI:
             project_id=project_id,
             content=content,
             desc=desc,
+            kind=kind,
             priority=priority,
             start_date=start_str,
             due_date=due_str,
@@ -1000,6 +1003,7 @@ class UnifiedTickTickAPI:
                 project_id=project_id,
                 content=task_spec.get("content"),
                 desc=task_spec.get("description"),
+                kind=task_spec.get("kind"),
                 priority=priority,
                 start_date=start_date,
                 due_date=due_date,
@@ -1116,6 +1120,8 @@ class UnifiedTickTickAPI:
             if "column_id" in update:
                 # column_id can be empty string to remove from column
                 v2_update["columnId"] = update["column_id"] if update["column_id"] else ""
+            if "kind" in update and update["kind"] is not None:
+                v2_update["kind"] = update["kind"]
 
             v2_updates.append(v2_update)
 
