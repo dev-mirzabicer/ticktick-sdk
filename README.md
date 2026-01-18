@@ -20,7 +20,7 @@ A comprehensive async Python SDK for [TickTick](https://ticktick.com) with [MCP]
   - [Step 3: Configure Your AI Assistant](#step-3-configure-your-ai-assistant)
   - [CLI Reference](#cli-reference)
   - [Example Conversations](#example-conversations)
-  - [Available MCP Tools](#available-mcp-tools-51-total)
+  - [Available MCP Tools](#available-mcp-tools-43-total)
 - [Python Library Setup & Usage](#python-library-setup--usage)
   - [Setup](#setup)
   - [Quick Start](#quick-start)
@@ -44,17 +44,19 @@ A comprehensive async Python SDK for [TickTick](https://ticktick.com) with [MCP]
 ## Features
 
 ### MCP Server
-- **51 Tools**: Comprehensive coverage of TickTick functionality
+- **43 Tools**: Streamlined coverage of TickTick functionality
+- **Batch Operations**: All mutations accept lists (1-100 items) for bulk operations
 - **AI-Ready**: Works with Claude, GPT, and other MCP-compatible assistants
 - **Dual Output**: Markdown for humans, JSON for machines
 
 ### Python Library
 - **Full Async Support**: Built on `httpx` for high-performance async operations
+- **Batch Operations**: Create, update, delete, complete up to 100 tasks in a single call
 - **Complete Task Management**: Create, read, update, delete, complete, move, pin tasks
 - **Kanban Boards**: Full column management (create, update, delete, move tasks between columns)
 - **Project Organization**: Projects, folders, kanban boards
 - **Tag System**: Hierarchical tags with colors
-- **Habit Tracking**: Full CRUD for habits with check-ins, streaks, and goals
+- **Habit Tracking**: Full CRUD for habits with batch check-ins, streaks, and goals
 - **Focus/Pomodoro**: Access focus session data and statistics
 - **User Analytics**: Productivity scores, levels, completion rates
 
@@ -242,25 +244,24 @@ Once configured, you can ask Claude things like:
 - "Check in my meditation habit for today"
 - "Create a new habit to drink 8 glasses of water daily"
 
-### Available MCP Tools (51 Total)
+### Available MCP Tools (43 Total)
 
-#### Task Tools
+All mutation tools accept lists for batch operations (1-100 items).
+
+#### Task Tools (Batch-Capable)
 | Tool | Description |
 |------|-------------|
-| `ticktick_create_task` | Create a new task with title, dates, tags, etc. |
+| `ticktick_create_tasks` | Create 1-50 tasks with titles, dates, tags, etc. |
 | `ticktick_get_task` | Get task details by ID |
-| `ticktick_list_tasks` | List tasks with optional filters |
-| `ticktick_update_task` | Update task properties |
-| `ticktick_complete_task` | Mark task as complete |
-| `ticktick_delete_task` | Delete a task (moves to trash) |
-| `ticktick_move_task` | Move task between projects |
-| `ticktick_make_subtask` | Create parent-child relationship |
-| `ticktick_unparent_subtask` | Remove parent-child relationship |
-| `ticktick_completed_tasks` | List recently completed tasks |
-| `ticktick_abandoned_tasks` | List abandoned ("won't do") tasks |
-| `ticktick_deleted_tasks` | List deleted tasks (in trash) |
+| `ticktick_list_tasks` | List tasks (active/completed/abandoned/deleted via status filter) |
+| `ticktick_update_tasks` | Update 1-100 tasks (includes column assignment) |
+| `ticktick_complete_tasks` | Complete 1-100 tasks |
+| `ticktick_delete_tasks` | Delete 1-100 tasks (moves to trash) |
+| `ticktick_move_tasks` | Move 1-50 tasks between projects |
+| `ticktick_set_task_parents` | Set parent-child relationships for 1-50 tasks |
+| `ticktick_unparent_tasks` | Remove parent relationships from 1-50 tasks |
 | `ticktick_search_tasks` | Search tasks by text |
-| `ticktick_pin_task` | Pin or unpin a task |
+| `ticktick_pin_tasks` | Pin or unpin 1-100 tasks |
 
 #### Project Tools
 | Tool | Description |
@@ -286,30 +287,26 @@ Once configured, you can ask Claude things like:
 | `ticktick_create_column` | Create a kanban column |
 | `ticktick_update_column` | Update column name or order |
 | `ticktick_delete_column` | Delete a kanban column |
-| `ticktick_move_task_to_column` | Move task to a column |
 
 #### Tag Tools
 | Tool | Description |
 |------|-------------|
 | `ticktick_list_tags` | List all tags |
 | `ticktick_create_tag` | Create a tag with color |
-| `ticktick_update_tag` | Update tag color/parent |
+| `ticktick_update_tag` | Update tag properties (includes rename via label) |
 | `ticktick_delete_tag` | Delete a tag |
-| `ticktick_rename_tag` | Rename a tag |
 | `ticktick_merge_tags` | Merge two tags |
 
-#### Habit Tools
+#### Habit Tools (Batch-Capable)
 | Tool | Description |
 |------|-------------|
 | `ticktick_habits` | List all habits |
 | `ticktick_habit` | Get habit details |
 | `ticktick_habit_sections` | List sections (morning/afternoon/night) |
 | `ticktick_create_habit` | Create a new habit |
-| `ticktick_update_habit` | Update habit properties |
+| `ticktick_update_habit` | Update habit properties (includes archive/unarchive) |
 | `ticktick_delete_habit` | Delete a habit |
-| `ticktick_checkin_habit` | Check in for today or a past date |
-| `ticktick_archive_habit` | Archive a habit |
-| `ticktick_unarchive_habit` | Unarchive a habit |
+| `ticktick_checkin_habits` | Check in 1-50 habits (supports backdating) |
 | `ticktick_habit_checkins` | Get check-in history |
 
 #### User & Analytics Tools
