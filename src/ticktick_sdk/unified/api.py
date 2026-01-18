@@ -915,6 +915,455 @@ class UnifiedTickTickAPI:
         return task
 
     # =========================================================================
+    # Batch Task Operations (V2 only)
+    # =========================================================================
+
+    async def batch_create_tasks(
+        self,
+        tasks: list[dict[str, Any]],
+    ) -> list[Task]:
+        """
+        Create multiple tasks in a batch operation.
+
+        V2-only operation. Each task in the list will be created, and if
+        parent_id is specified, the parent-child relationship will be set
+        after creation.
+
+        Args:
+            tasks: List of task specifications. Each dict should contain:
+                - title (required): Task title
+                - project_id (optional): Project ID (defaults to inbox)
+                - content (optional): Task notes/content
+                - priority (optional): Priority (0, 1, 3, 5)
+                - start_date (optional): Start date (datetime or ISO string)
+                - due_date (optional): Due date (datetime or ISO string)
+                - time_zone (optional): Timezone
+                - all_day (optional): All-day flag
+                - reminders (optional): List of reminder triggers
+                - recurrence (optional): RRULE recurrence pattern
+                - tags (optional): List of tag names
+                - parent_id (optional): Parent task ID for subtasks
+
+        Returns:
+            List of created Task objects
+
+        Raises:
+            TickTickAPIUnavailableError: If V2 API is not available
+            TickTickAPIError: On other API errors
+        """
+        self._ensure_initialized()
+
+        if not self._router.has_v2:
+            raise TickTickAPIUnavailableError(
+                "V2 API is required for batch_create_tasks",
+                operation="batch_create_tasks",
+            )
+
+        results: list[Task] = []
+
+        # Process each task (V2 batch create doesn't support parent_id directly)
+        for task_spec in tasks:
+            title = task_spec.get("title")
+            if not title:
+                raise TickTickAPIError(
+                    "Each task requires a 'title' field",
+                    details={"task_spec": task_spec},
+                )
+
+            project_id = task_spec.get("project_id") or self._inbox_id
+            parent_id = task_spec.get("parent_id")
+
+            # Format dates if provided
+            start_date = task_spec.get("start_date")
+            due_date = task_spec.get("due_date")
+            if start_date and isinstance(start_date, datetime):
+                start_date = Task.format_datetime(start_date, "v2")
+            if due_date and isinstance(due_date, datetime):
+                due_date = Task.format_datetime(due_date, "v2")
+
+            # Prepare reminders
+            reminders = task_spec.get("reminders")
+            if reminders:
+                reminders = [{"trigger": r} for r in reminders]
+
+            # Map priority string to int if needed
+            priority = task_spec.get("priority")
+            if isinstance(priority, str):
+                priority_map = {"none": 0, "low": 1, "medium": 3, "high": 5}
+                priority = priority_map.get(priority.lower(), priority)
+                if isinstance(priority, str):
+                    priority = int(priority)
+
+            # Create the task
+            response = await self._v2_client.create_task(  # type: ignore
+                title=title,
+                project_id=project_id,
+                content=task_spec.get("content"),
+                desc=task_spec.get("description"),
+                priority=priority,
+                start_date=start_date,
+                due_date=due_date,
+                time_zone=task_spec.get("time_zone"),
+                is_all_day=task_spec.get("all_day"),
+                reminders=reminders,
+                repeat_flag=task_spec.get("recurrence"),
+                tags=task_spec.get("tags"),
+            )
+
+            # Get the created task ID
+            task_id = next(iter(response.get("id2etag", {}).keys()), None)
+            if not task_id:
+                raise TickTickAPIError(
+                    "batch_create_tasks succeeded but returned no task ID",
+                    details={"response": response, "title": title},
+                )
+
+            # Set parent if requested
+            if parent_id:
+                await self._v2_client.set_task_parent(task_id, project_id, parent_id)  # type: ignore
+
+            # Fetch the created task
+            results.append(await self.get_task(task_id, project_id))
+
+        return results
+
+    async def batch_update_tasks(
+        self,
+        updates: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        """
+        Update multiple tasks in a batch operation.
+
+        V2-only operation.
+
+        Args:
+            updates: List of update specifications. Each dict must contain:
+                - task_id (required): Task ID to update
+                - project_id (required): Project ID containing the task
+                And any of these optional fields:
+                - title: New title
+                - content: New content
+                - priority: New priority (0, 1, 3, 5 or 'none', 'low', 'medium', 'high')
+                - start_date: New start date
+                - due_date: New due date
+                - time_zone: New timezone
+                - all_day: All-day flag
+                - tags: New tags (replaces existing)
+                - recurrence: New recurrence rule
+                - column_id: Kanban column ID (empty string to remove from column)
+
+        Returns:
+            Batch response with id2etag and id2error
+
+        Raises:
+            TickTickAPIUnavailableError: If V2 API is not available
+            TickTickAPIError: On other API errors
+        """
+        self._ensure_initialized()
+
+        if not self._router.has_v2:
+            raise TickTickAPIUnavailableError(
+                "V2 API is required for batch_update_tasks",
+                operation="batch_update_tasks",
+            )
+
+        v2_updates: list[dict[str, Any]] = []
+
+        for update in updates:
+            task_id = update.get("task_id")
+            project_id = update.get("project_id")
+
+            if not task_id or not project_id:
+                raise TickTickAPIError(
+                    "Each update requires 'task_id' and 'project_id'",
+                    details={"update": update},
+                )
+
+            v2_update: dict[str, Any] = {
+                "id": task_id,
+                "projectId": project_id,
+            }
+
+            # Map fields to V2 format
+            if "title" in update and update["title"] is not None:
+                v2_update["title"] = update["title"]
+            if "content" in update and update["content"] is not None:
+                v2_update["content"] = update["content"]
+            if "priority" in update and update["priority"] is not None:
+                priority = update["priority"]
+                if isinstance(priority, str):
+                    priority_map = {"none": 0, "low": 1, "medium": 3, "high": 5}
+                    priority = priority_map.get(priority.lower(), int(priority))
+                v2_update["priority"] = priority
+            if "start_date" in update and update["start_date"] is not None:
+                start_date = update["start_date"]
+                if isinstance(start_date, datetime):
+                    start_date = Task.format_datetime(start_date, "v2")
+                v2_update["startDate"] = start_date
+            if "due_date" in update and update["due_date"] is not None:
+                due_date = update["due_date"]
+                if isinstance(due_date, datetime):
+                    due_date = Task.format_datetime(due_date, "v2")
+                v2_update["dueDate"] = due_date
+            if "time_zone" in update and update["time_zone"] is not None:
+                v2_update["timeZone"] = update["time_zone"]
+            if "all_day" in update and update["all_day"] is not None:
+                v2_update["isAllDay"] = update["all_day"]
+            if "tags" in update and update["tags"] is not None:
+                v2_update["tags"] = update["tags"]
+            if "recurrence" in update and update["recurrence"] is not None:
+                v2_update["repeatFlag"] = update["recurrence"]
+            if "column_id" in update:
+                # column_id can be empty string to remove from column
+                v2_update["columnId"] = update["column_id"] if update["column_id"] else ""
+
+            v2_updates.append(v2_update)
+
+        response = await self._v2_client.batch_tasks(update=v2_updates)  # type: ignore
+        _check_batch_response_errors(response, "batch_update_tasks", [u["id"] for u in v2_updates])
+        return response
+
+    async def batch_delete_tasks(
+        self,
+        task_ids: list[tuple[str, str]],
+    ) -> dict[str, Any]:
+        """
+        Delete multiple tasks in a batch operation.
+
+        V2-only operation.
+
+        Args:
+            task_ids: List of (task_id, project_id) tuples
+
+        Returns:
+            Batch response with id2etag and id2error
+
+        Raises:
+            TickTickAPIUnavailableError: If V2 API is not available
+        """
+        self._ensure_initialized()
+
+        if not self._router.has_v2:
+            raise TickTickAPIUnavailableError(
+                "V2 API is required for batch_delete_tasks",
+                operation="batch_delete_tasks",
+            )
+
+        deletes = [{"taskId": tid, "projectId": pid} for tid, pid in task_ids]
+        response = await self._v2_client.batch_tasks(delete=deletes)  # type: ignore
+        return response
+
+    async def batch_complete_tasks(
+        self,
+        task_ids: list[tuple[str, str]],
+    ) -> dict[str, Any]:
+        """
+        Complete multiple tasks in a batch operation.
+
+        V2-only operation.
+
+        Args:
+            task_ids: List of (task_id, project_id) tuples
+
+        Returns:
+            Batch response with id2etag and id2error
+
+        Raises:
+            TickTickAPIUnavailableError: If V2 API is not available
+        """
+        self._ensure_initialized()
+
+        if not self._router.has_v2:
+            raise TickTickAPIUnavailableError(
+                "V2 API is required for batch_complete_tasks",
+                operation="batch_complete_tasks",
+            )
+
+        updates = [{
+            "id": tid,
+            "projectId": pid,
+            "status": TaskStatus.COMPLETED,
+            "completedTime": Task.format_datetime(datetime.now(), "v2"),
+        } for tid, pid in task_ids]
+
+        response = await self._v2_client.batch_tasks(update=updates)  # type: ignore
+        _check_batch_response_errors(response, "batch_complete_tasks", [tid for tid, _ in task_ids])
+        return response
+
+    async def batch_move_tasks(
+        self,
+        moves: list[dict[str, str]],
+    ) -> Any:
+        """
+        Move multiple tasks between projects in a batch operation.
+
+        V2-only operation.
+
+        Args:
+            moves: List of move specifications. Each dict must contain:
+                - task_id: Task ID to move
+                - from_project_id: Current project ID
+                - to_project_id: Destination project ID
+
+        Returns:
+            Response from the move operation
+
+        Raises:
+            TickTickAPIUnavailableError: If V2 API is not available
+        """
+        self._ensure_initialized()
+
+        if not self._router.has_v2:
+            raise TickTickAPIUnavailableError(
+                "V2 API is required for batch_move_tasks",
+                operation="batch_move_tasks",
+            )
+
+        v2_moves = [{
+            "taskId": m["task_id"],
+            "fromProjectId": m["from_project_id"],
+            "toProjectId": m["to_project_id"],
+        } for m in moves]
+
+        return await self._v2_client.move_tasks(v2_moves)  # type: ignore
+
+    async def batch_set_task_parents(
+        self,
+        assignments: list[dict[str, str]],
+    ) -> list[dict[str, Any]]:
+        """
+        Make multiple tasks into subtasks in a batch operation.
+
+        V2-only operation.
+
+        Args:
+            assignments: List of parent assignments. Each dict must contain:
+                - task_id: Task ID to make a subtask
+                - project_id: Project ID containing both tasks
+                - parent_id: Parent task ID
+
+        Returns:
+            List of responses for each operation
+
+        Raises:
+            TickTickAPIUnavailableError: If V2 API is not available
+        """
+        self._ensure_initialized()
+
+        if not self._router.has_v2:
+            raise TickTickAPIUnavailableError(
+                "V2 API is required for batch_set_task_parents",
+                operation="batch_set_task_parents",
+            )
+
+        results: list[dict[str, Any]] = []
+        for assignment in assignments:
+            response = await self._v2_client.set_task_parent(  # type: ignore
+                task_id=assignment["task_id"],
+                project_id=assignment["project_id"],
+                parent_id=assignment["parent_id"],
+            )
+            results.append(response)
+
+        return results
+
+    async def batch_unparent_tasks(
+        self,
+        tasks: list[dict[str, str]],
+    ) -> list[dict[str, Any]]:
+        """
+        Remove multiple tasks from their parents in a batch operation.
+
+        V2-only operation.
+
+        Args:
+            tasks: List of unparent specifications. Each dict must contain:
+                - task_id: Task ID to unparent
+                - project_id: Project ID containing the task
+
+        Returns:
+            List of responses for each operation
+
+        Raises:
+            TickTickAPIUnavailableError: If V2 API is not available
+            TickTickAPIError: If a task is not a subtask
+        """
+        self._ensure_initialized()
+
+        if not self._router.has_v2:
+            raise TickTickAPIUnavailableError(
+                "V2 API is required for batch_unparent_tasks",
+                operation="batch_unparent_tasks",
+            )
+
+        results: list[dict[str, Any]] = []
+        for task_spec in tasks:
+            task_id = task_spec["task_id"]
+            project_id = task_spec["project_id"]
+
+            # Get task to find parent_id
+            task = await self._v2_client.get_task(task_id)  # type: ignore
+            parent_id = task.get("parentId")
+
+            if not parent_id:
+                raise TickTickAPIError(
+                    f"Task {task_id} is not a subtask (has no parent)",
+                    details={"task_id": task_id},
+                )
+
+            response = await self._v2_client.unset_task_parent(  # type: ignore
+                task_id=task_id,
+                project_id=project_id,
+                old_parent_id=parent_id,
+            )
+            results.append(response)
+
+        return results
+
+    async def batch_pin_tasks(
+        self,
+        pin_operations: list[dict[str, Any]],
+    ) -> list[Task]:
+        """
+        Pin or unpin multiple tasks in a batch operation.
+
+        V2-only operation.
+
+        Args:
+            pin_operations: List of pin specifications. Each dict must contain:
+                - task_id: Task ID
+                - project_id: Project ID
+                - pin: True to pin, False to unpin
+
+        Returns:
+            List of updated Task objects
+
+        Raises:
+            TickTickAPIUnavailableError: If V2 API is not available
+        """
+        self._ensure_initialized()
+
+        if not self._router.has_v2:
+            raise TickTickAPIUnavailableError(
+                "V2 API is required for batch_pin_tasks",
+                operation="batch_pin_tasks",
+            )
+
+        results: list[Task] = []
+        for op in pin_operations:
+            task_id = op["task_id"]
+            project_id = op["project_id"]
+            pin = op.get("pin", True)
+
+            if pin:
+                task = await self.pin_task(task_id, project_id)
+            else:
+                task = await self.unpin_task(task_id, project_id)
+            results.append(task)
+
+        return results
+
+    # =========================================================================
     # Column Operations (Kanban, V2 only)
     # =========================================================================
 
@@ -2220,3 +2669,129 @@ class UnifiedTickTickAPI:
             result[habit_id] = [HabitCheckin.from_v2(c) for c in checkins]
 
         return result
+
+    async def batch_checkin_habits(
+        self,
+        checkins: list[dict[str, Any]],
+    ) -> dict[str, Habit]:
+        """
+        Record multiple habit check-ins in a batch operation.
+
+        This method is ideal for backdating multiple days of habit completions.
+        Each check-in properly updates the habit's streak and total.
+
+        V2-only operation.
+
+        Args:
+            checkins: List of check-in specifications. Each dict must contain:
+                - habit_id (required): Habit ID to check in
+                - value (optional): Check-in value (default 1.0 for boolean habits)
+                - checkin_date (optional): Date to check in for (date object or
+                  YYYY-MM-DD string). Defaults to today.
+
+        Returns:
+            Dict mapping habit_id to updated Habit object
+
+        Raises:
+            TickTickAPIUnavailableError: If V2 API is not available
+            TickTickNotFoundError: If a habit is not found
+        """
+        self._ensure_initialized()
+
+        if not self._router.has_v2:
+            raise TickTickAPIUnavailableError(
+                "V2 API is required for batch_checkin_habits",
+                operation="batch_checkin_habits",
+            )
+
+        # Group checkins by habit for efficient processing
+        habit_checkins: dict[str, list[dict[str, Any]]] = {}
+        for checkin in checkins:
+            habit_id = checkin.get("habit_id")
+            if not habit_id:
+                raise TickTickAPIError(
+                    "Each check-in requires a 'habit_id' field",
+                    details={"checkin": checkin},
+                )
+            if habit_id not in habit_checkins:
+                habit_checkins[habit_id] = []
+            habit_checkins[habit_id].append(checkin)
+
+        results: dict[str, Habit] = {}
+        today = date.today()
+
+        for habit_id, habit_checkin_list in habit_checkins.items():
+            # Get original habit to preserve data
+            original_habit = await self.get_habit(habit_id)
+
+            # Create check-in records for each date
+            for checkin in habit_checkin_list:
+                value = checkin.get("value", 1.0)
+                checkin_date = checkin.get("checkin_date")
+
+                # Parse date if provided as string
+                if checkin_date is None:
+                    target_date = today
+                elif isinstance(checkin_date, str):
+                    target_date = date.fromisoformat(checkin_date)
+                else:
+                    target_date = checkin_date
+
+                checkin_stamp = int(target_date.strftime("%Y%m%d"))
+                checkin_id = _generate_object_id()
+
+                await self._v2_client.create_habit_checkin(  # type: ignore
+                    checkin_id=checkin_id,
+                    habit_id=habit_id,
+                    checkin_stamp=checkin_stamp,
+                    value=value,
+                    goal=original_habit.goal,
+                )
+
+            # After all check-ins for this habit, recalculate streak
+            checkins_data = await self.get_habit_checkins([habit_id], after_stamp=0)
+            all_checkins = checkins_data.get(habit_id, [])
+
+            calculated_streak = _calculate_streak_from_checkins(all_checkins, today)
+            calculated_total = _count_total_checkins(all_checkins)
+
+            # Update habit with calculated values
+            response = await self._v2_client.update_habit(  # type: ignore
+                habit_id=habit_id,
+                name=original_habit.name,
+                total_checkins=calculated_total,
+                current_streak=calculated_streak,
+            )
+            _check_batch_response_errors(response, "batch_checkin_habits", [habit_id])
+
+            # Build result habit with calculated values
+            results[habit_id] = Habit(
+                id=original_habit.id,
+                name=original_habit.name,
+                icon=original_habit.icon,
+                color=original_habit.color,
+                sort_order=original_habit.sort_order,
+                status=original_habit.status,
+                encouragement=original_habit.encouragement,
+                total_checkins=calculated_total,
+                created_time=original_habit.created_time,
+                modified_time=original_habit.modified_time,
+                archived_time=original_habit.archived_time,
+                habit_type=original_habit.habit_type,
+                goal=original_habit.goal,
+                step=original_habit.step,
+                unit=original_habit.unit,
+                etag=original_habit.etag,
+                repeat_rule=original_habit.repeat_rule,
+                reminders=original_habit.reminders,
+                record_enable=original_habit.record_enable,
+                section_id=original_habit.section_id,
+                target_days=original_habit.target_days,
+                target_start_date=original_habit.target_start_date,
+                completed_cycles=original_habit.completed_cycles,
+                ex_dates=original_habit.ex_dates,
+                current_streak=calculated_streak,
+                style=original_habit.style,
+            )
+
+        return results
