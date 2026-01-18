@@ -227,10 +227,25 @@ The `ticktick-sdk` command provides several subcommands:
 |---------|-------------|
 | `ticktick-sdk` | Start the MCP server (default) |
 | `ticktick-sdk server` | Start the MCP server (explicit) |
+| `ticktick-sdk server --host HOST` | Use specific API host (`ticktick.com` or `dida365.com`) |
+| `ticktick-sdk server --enabledModules MODULES` | Enable only specific tool modules (comma-separated) |
+| `ticktick-sdk server --enabledTools TOOLS` | Enable only specific tools (comma-separated) |
 | `ticktick-sdk auth` | Get OAuth2 access token (opens browser) |
 | `ticktick-sdk auth --manual` | Get OAuth2 access token (SSH-friendly) |
 | `ticktick-sdk --version` | Show version information |
 | `ticktick-sdk --help` | Show help message |
+
+**Tool Filtering** (reduces context window usage for AI assistants):
+
+```bash
+# Enable only task and project tools
+ticktick-sdk server --enabledModules tasks,projects
+
+# Enable specific tools only
+ticktick-sdk server --enabledTools ticktick_create_tasks,ticktick_list_tasks
+
+# Available modules: tasks, projects, folders, columns, tags, habits, user, focus
+```
 
 ### Example Conversations
 
@@ -913,6 +928,7 @@ The inbox is a special project that cannot be deleted. Get its ID via `await cli
 | `TICKTICK_USERNAME` | Yes | Your TickTick email |
 | `TICKTICK_PASSWORD` | Yes | Your TickTick password |
 | `TICKTICK_REDIRECT_URI` | No | OAuth2 redirect URI (default: `http://127.0.0.1:8080/callback`) |
+| `TICKTICK_HOST` | No | API host: `ticktick.com` (default) or `dida365.com` (Chinese) |
 | `TICKTICK_TIMEOUT` | No | Request timeout in seconds (default: `30`) |
 | `TICKTICK_DEVICE_ID` | No | Device ID for V2 API (auto-generated) |
 
