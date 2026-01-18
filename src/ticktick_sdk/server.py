@@ -574,6 +574,7 @@ async def ticktick_list_tasks(params: TaskListInput, ctx: Context) -> str:
         params: Filter parameters:
             - status (str): 'active' (default), 'completed', 'abandoned', 'deleted'
             - project_id (str): Filter by project
+            - column_id (str): Filter by kanban column (active only, use with project_id)
             - tag (str): Filter by tag name
             - priority (str): Filter by priority level
             - due_today (bool): Only tasks due today (active only)
@@ -593,6 +594,7 @@ async def ticktick_list_tasks(params: TaskListInput, ctx: Context) -> str:
         - Abandoned tasks: status="abandoned", days=30
         - Deleted tasks: status="deleted"
         - Active + project: status="active", project_id="..."
+        - Tasks in column: project_id="...", column_id="..." (kanban workflow)
     """
     try:
         client = get_client(ctx)
@@ -604,6 +606,9 @@ async def ticktick_list_tasks(params: TaskListInput, ctx: Context) -> str:
             # Apply active-only filters
             if params.project_id:
                 tasks = [t for t in tasks if t.project_id == params.project_id]
+
+            if params.column_id:
+                tasks = [t for t in tasks if t.column_id == params.column_id]
 
             if params.tag:
                 tag_lower = params.tag.lower()
