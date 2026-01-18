@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
-from typing import Any
+from typing import Any, Callable
 
 from ticktick_sdk.models import Column, Task, Project, ProjectGroup, Tag, User, UserStatus, UserStatistics
 from ticktick_sdk.tools.inputs import ResponseFormat
@@ -426,8 +426,8 @@ def format_statistics_markdown(stats: UserStatistics) -> str:
 def format_response(
     data: Any,
     response_format: ResponseFormat,
-    markdown_formatter: callable,
-    json_formatter: callable,
+    markdown_formatter: Callable[[Any], str],
+    json_formatter: Callable[[Any], dict[str, Any]],
 ) -> str:
     """
     Format a response based on the requested format.
@@ -475,3 +475,235 @@ def error_message(error: str, suggestion: str | None = None) -> str:
     if suggestion:
         msg += f"\n\n*Suggestion*: {suggestion}"
     return msg
+
+
+# =============================================================================
+# Batch Operation Formatting
+# =============================================================================
+
+
+def format_batch_create_tasks_markdown(tasks: list[Task]) -> str:
+    """Format batch task creation results as Markdown."""
+    if not tasks:
+        return "# Tasks Created\n\nNo tasks were created."
+
+    lines = [f"# {len(tasks)} Task(s) Created", ""]
+
+    for task in tasks:
+        priority_indicator = priority_emoji(task.priority)
+        task_title = task.title or "(No title)"
+        due_str = f" | Due: {format_date(task.due_date)}" if task.due_date else ""
+        lines.append(f"- {priority_indicator} **{task_title}** (`{task.id}`){due_str}")
+
+    return "\n".join(lines)
+
+
+def format_batch_create_tasks_json(tasks: list[Task]) -> dict[str, Any]:
+    """Format batch task creation results as JSON."""
+    return {
+        "success": True,
+        "count": len(tasks),
+        "tasks": [format_task_json(t) for t in tasks],
+    }
+
+
+def format_batch_update_tasks_markdown(
+    results: dict[str, Any],
+    update_count: int,
+) -> str:
+    """Format batch task update results as Markdown."""
+    lines = [f"# {update_count} Task(s) Updated", ""]
+
+    if results.get("id2error"):
+        lines.append("## Errors")
+        for task_id, error in results["id2error"].items():
+            lines.append(f"- `{task_id}`: {error}")
+        lines.append("")
+
+    if results.get("id2etag"):
+        lines.append("## Updated Tasks")
+        for task_id in results["id2etag"]:
+            lines.append(f"- `{task_id}` updated successfully")
+
+    return "\n".join(lines)
+
+
+def format_batch_update_tasks_json(
+    results: dict[str, Any],
+    update_count: int,
+) -> dict[str, Any]:
+    """Format batch task update results as JSON."""
+    return {
+        "success": not results.get("id2error"),
+        "count": update_count,
+        "updated_ids": list(results.get("id2etag", {}).keys()),
+        "errors": results.get("id2error", {}),
+    }
+
+
+def format_batch_delete_tasks_markdown(
+    count: int,
+    task_ids: list[str],
+) -> str:
+    """Format batch task deletion results as Markdown."""
+    lines = [f"# {count} Task(s) Deleted", ""]
+    lines.append("Tasks moved to trash:")
+    for task_id in task_ids:
+        lines.append(f"- `{task_id}`")
+    return "\n".join(lines)
+
+
+def format_batch_delete_tasks_json(
+    count: int,
+    task_ids: list[str],
+) -> dict[str, Any]:
+    """Format batch task deletion results as JSON."""
+    return {
+        "success": True,
+        "count": count,
+        "deleted_ids": task_ids,
+    }
+
+
+def format_batch_complete_tasks_markdown(
+    count: int,
+    task_ids: list[str],
+) -> str:
+    """Format batch task completion results as Markdown."""
+    lines = [f"# {count} Task(s) Completed", ""]
+    for task_id in task_ids:
+        lines.append(f"- `{task_id}` marked as completed")
+    return "\n".join(lines)
+
+
+def format_batch_complete_tasks_json(
+    count: int,
+    task_ids: list[str],
+) -> dict[str, Any]:
+    """Format batch task completion results as JSON."""
+    return {
+        "success": True,
+        "count": count,
+        "completed_ids": task_ids,
+    }
+
+
+def format_batch_move_tasks_markdown(
+    moves: list[dict[str, str]],
+) -> str:
+    """Format batch task move results as Markdown."""
+    if not moves:
+        return "# Tasks Moved\n\nNo tasks were moved."
+
+    lines = [f"# {len(moves)} Task(s) Moved", ""]
+    for move in moves:
+        lines.append(
+            f"- `{move['task_id']}`: "
+            f"`{move['from_project_id']}` → `{move['to_project_id']}`"
+        )
+    return "\n".join(lines)
+
+
+def format_batch_move_tasks_json(
+    moves: list[dict[str, str]],
+) -> dict[str, Any]:
+    """Format batch task move results as JSON."""
+    return {
+        "success": True,
+        "count": len(moves),
+        "moves": moves,
+    }
+
+
+def format_batch_set_parents_markdown(
+    results: list[dict[str, Any]],
+) -> str:
+    """Format batch set parent results as Markdown."""
+    if not results:
+        return "# Subtasks Created\n\nNo parent assignments made."
+
+    lines = [f"# {len(results)} Subtask Assignment(s)", ""]
+    for result in results:
+        lines.append(
+            f"- `{result['task_id']}` → parent `{result['parent_id']}`"
+        )
+    return "\n".join(lines)
+
+
+def format_batch_set_parents_json(
+    results: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Format batch set parent results as JSON."""
+    return {
+        "success": True,
+        "count": len(results),
+        "assignments": results,
+    }
+
+
+def format_batch_unparent_tasks_markdown(
+    results: list[dict[str, Any]],
+) -> str:
+    """Format batch unparent results as Markdown."""
+    if not results:
+        return "# Tasks Unparented\n\nNo tasks were unparented."
+
+    lines = [f"# {len(results)} Task(s) Made Top-Level", ""]
+    for result in results:
+        lines.append(f"- `{result['task_id']}` removed from parent")
+    return "\n".join(lines)
+
+
+def format_batch_unparent_tasks_json(
+    results: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Format batch unparent results as JSON."""
+    return {
+        "success": True,
+        "count": len(results),
+        "unparented": results,
+    }
+
+
+def format_batch_pin_tasks_markdown(
+    tasks: list[Task],
+) -> str:
+    """Format batch pin/unpin results as Markdown."""
+    if not tasks:
+        return "# Task Pin Status\n\nNo pin operations performed."
+
+    pinned = [t for t in tasks if t.is_pinned]
+    unpinned = [t for t in tasks if not t.is_pinned]
+
+    lines = [f"# {len(tasks)} Task Pin Operation(s)", ""]
+
+    if pinned:
+        lines.append(f"## Pinned ({len(pinned)})")
+        for task in pinned:
+            lines.append(f"- **{task.title or '(No title)'}** (`{task.id}`)")
+        lines.append("")
+
+    if unpinned:
+        lines.append(f"## Unpinned ({len(unpinned)})")
+        for task in unpinned:
+            lines.append(f"- **{task.title or '(No title)'}** (`{task.id}`)")
+
+    return "\n".join(lines)
+
+
+def format_batch_pin_tasks_json(
+    tasks: list[Task],
+) -> dict[str, Any]:
+    """Format batch pin/unpin results as JSON."""
+    return {
+        "success": True,
+        "count": len(tasks),
+        "tasks": [
+            {
+                "id": t.id,
+                "title": t.title,
+                "is_pinned": t.is_pinned,
+            }
+            for t in tasks
+        ],
+    }
