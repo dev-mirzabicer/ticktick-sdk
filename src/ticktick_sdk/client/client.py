@@ -578,6 +578,152 @@ class TickTickClient:
         return await self._api.unpin_task(task_id, project_id)
 
     # =========================================================================
+    # Batch Task Operations
+    # =========================================================================
+
+    async def create_tasks(
+        self,
+        tasks: list[dict[str, Any]],
+    ) -> list[Task]:
+        """
+        Create one or more tasks.
+
+        Args:
+            tasks: List of task specifications. Each dict should contain:
+                - title (required): Task title
+                - project_id (optional): Project ID (defaults to inbox)
+                - content (optional): Task notes
+                - priority (optional): Priority (0, 1, 3, 5 or 'none', 'low', 'medium', 'high')
+                - start_date (optional): Start date
+                - due_date (optional): Due date
+                - tags (optional): List of tag names
+                - parent_id (optional): Parent task ID for subtasks
+
+        Returns:
+            List of created Task objects
+        """
+        return await self._api.batch_create_tasks(tasks)
+
+    async def update_tasks(
+        self,
+        updates: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        """
+        Update one or more tasks.
+
+        Args:
+            updates: List of update specifications. Each dict must contain:
+                - task_id (required): Task ID
+                - project_id (required): Project ID
+                And any optional update fields (title, content, priority, etc.)
+
+        Returns:
+            Batch response with id2etag and id2error
+        """
+        return await self._api.batch_update_tasks(updates)
+
+    async def delete_tasks(
+        self,
+        task_ids: list[tuple[str, str]],
+    ) -> dict[str, Any]:
+        """
+        Delete one or more tasks.
+
+        Args:
+            task_ids: List of (task_id, project_id) tuples
+
+        Returns:
+            Batch response with id2etag and id2error
+        """
+        return await self._api.batch_delete_tasks(task_ids)
+
+    async def complete_tasks(
+        self,
+        task_ids: list[tuple[str, str]],
+    ) -> dict[str, Any]:
+        """
+        Complete one or more tasks.
+
+        Args:
+            task_ids: List of (task_id, project_id) tuples
+
+        Returns:
+            Batch response with id2etag and id2error
+        """
+        return await self._api.batch_complete_tasks(task_ids)
+
+    async def move_tasks(
+        self,
+        moves: list[dict[str, str]],
+    ) -> Any:
+        """
+        Move one or more tasks between projects.
+
+        Args:
+            moves: List of move specifications. Each dict must contain:
+                - task_id: Task ID
+                - from_project_id: Current project ID
+                - to_project_id: Destination project ID
+
+        Returns:
+            Response from move operation
+        """
+        return await self._api.batch_move_tasks(moves)
+
+    async def set_task_parents(
+        self,
+        assignments: list[dict[str, str]],
+    ) -> list[dict[str, Any]]:
+        """
+        Make one or more tasks into subtasks.
+
+        Args:
+            assignments: List of parent assignments. Each dict must contain:
+                - task_id: Task ID to make a subtask
+                - project_id: Project ID
+                - parent_id: Parent task ID
+
+        Returns:
+            List of responses for each operation
+        """
+        return await self._api.batch_set_task_parents(assignments)
+
+    async def unparent_tasks(
+        self,
+        tasks: list[dict[str, str]],
+    ) -> list[dict[str, Any]]:
+        """
+        Remove one or more tasks from their parents.
+
+        Args:
+            tasks: List of unparent specifications. Each dict must contain:
+                - task_id: Task ID to unparent
+                - project_id: Project ID
+
+        Returns:
+            List of responses for each operation
+        """
+        return await self._api.batch_unparent_tasks(tasks)
+
+    async def pin_tasks(
+        self,
+        pin_operations: list[dict[str, Any]],
+    ) -> list[Task]:
+        """
+        Pin or unpin one or more tasks.
+
+        Args:
+            pin_operations: List of pin specifications. Each dict must contain:
+                - task_id: Task ID
+                - project_id: Project ID
+                - pin: True to pin, False to unpin
+
+        Returns:
+            List of updated Task objects
+        """
+        return await self._api.batch_pin_tasks(pin_operations)
+
+    # =========================================================================
     # Kanban Columns
     # =========================================================================
 
@@ -1096,6 +1242,31 @@ class TickTickClient:
             Dict mapping habit IDs to lists of check-in records
         """
         return await self._api.get_habit_checkins(habit_ids, after_stamp)
+
+    async def checkin_habits(
+        self,
+        checkins: list[dict[str, Any]],
+    ) -> dict[str, Habit]:
+        """
+        Record one or more habit check-ins.
+
+        Ideal for backdating multiple days of habit completions.
+        Each check-in properly updates the habit's streak and total.
+
+        Args:
+            checkins: List of check-in specifications. Each dict must contain:
+                - habit_id (required): Habit ID
+                - value (optional): Check-in value (default 1.0 for boolean)
+                - checkin_date (optional): Date to check in for (date object or
+                  YYYY-MM-DD string). Defaults to today.
+
+        Returns:
+            Dict mapping habit_id to updated Habit object
+
+        Raises:
+            TickTickNotFoundError: If a habit is not found
+        """
+        return await self._api.batch_checkin_habits(checkins)
 
     # =========================================================================
     # Convenience Methods
