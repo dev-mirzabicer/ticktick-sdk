@@ -185,6 +185,17 @@ class Task(TickTickModel):
             ]
         return []
 
+    @field_validator("repeat_from", mode="before")
+    @classmethod
+    def parse_repeat_from(cls, v: Any) -> int | None:
+        if v is None or v == "":
+            return None
+        if isinstance(v, int):
+            return v
+        if isinstance(v, str):
+            return int(v)
+        return None
+
     # Properties
     @property
     def is_completed(self) -> bool:
