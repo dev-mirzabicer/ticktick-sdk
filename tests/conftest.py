@@ -687,6 +687,19 @@ class MockUnifiedAPI:
         task.status = TaskStatus.COMPLETED
         task.completed_time = utc_now()
 
+    async def abandon_task(self, task_id: str, project_id: str) -> None:
+        """Mock abandon task (set to 'Won't do' status)."""
+        self._record_call("abandon_task", (task_id, project_id), {})
+        self._check_failure("abandon_task")
+
+        if task_id not in self.tasks:
+            from ticktick_sdk.exceptions import TickTickNotFoundError
+            raise TickTickNotFoundError(f"Task not found: {task_id}")
+
+        task = self.tasks[task_id]
+        task.status = TaskStatus.ABANDONED
+        task.completed_time = utc_now()
+
     async def delete_task(self, task_id: str, project_id: str) -> None:
         """Mock delete task (soft delete - set deleted=1).
 
