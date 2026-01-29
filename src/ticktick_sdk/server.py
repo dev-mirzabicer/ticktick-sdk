@@ -847,6 +847,63 @@ async def ticktick_complete_tasks(params: CompleteTasksInput, ctx: Context) -> s
 
 
 @mcp.tool(
+    name="ticktick_abandon_tasks",
+    annotations={
+        "title": "Abandon Tasks (Won't Do)",
+        "readOnlyHint": False,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": True,
+    },
+)
+async def ticktick_abandon_tasks(params: CompleteTasksInput, ctx: Context) -> str:
+    """
+    Mark one or more tasks as abandoned ("Won't do").
+
+    Changes task status to abandoned (-1). Abandoned tasks appear in the
+    "Abandoned" section of completed tasks in TickTick, separate from
+    completed tasks. Use this when a task is no longer relevant or will
+    not be done, but you want to keep a record of it.
+
+    Supports batch operations (1-100 tasks).
+
+    Args:
+        params: Abandon parameters:
+            - tasks (list, required): List of task identifiers (1-100 tasks)
+              Each task must contain:
+                - task_id (str): Task to abandon
+                - project_id (str): Project containing the task
+            - response_format (str): 'markdown' (default) or 'json'
+
+    Returns:
+        Success confirmation or error message.
+
+    Examples:
+        Single task:
+            tasks=[{"task_id": "abc123", "project_id": "proj1"}]
+
+        Multiple tasks:
+            tasks=[
+                {"task_id": "abc1", "project_id": "proj1"},
+                {"task_id": "abc2", "project_id": "proj1"}
+            ]
+    """
+    try:
+        client = get_client(ctx)
+        task_ids = [(t.task_id, t.project_id) for t in params.tasks]
+        await client.abandon_tasks(task_ids)
+
+        count = len(task_ids)
+        if count == 1:
+            return success_message(f"Task `{task_ids[0][0]}` marked as abandoned (won't do).")
+        else:
+            return success_message(f"{count} tasks marked as abandoned (won't do).")
+
+    except Exception as e:
+        return handle_error(e, "abandon_tasks")
+
+
+@mcp.tool(
     name="ticktick_delete_tasks",
     annotations={
         "title": "Delete Tasks",

@@ -654,6 +654,46 @@ class UnifiedTickTickAPI:
             operation="complete_task",
         )
 
+    async def abandon_task(self, task_id: str, project_id: str) -> None:
+        """
+        Mark a task as abandoned ("Won't do").
+
+        Uses V2 API only (abandoned status is V2-only).
+
+        Note: V2 batch operations silently accept updates to nonexistent tasks,
+        so we verify the task exists first to provide proper error handling.
+
+        Args:
+            task_id: Task ID
+            project_id: Project ID
+
+        Raises:
+            TickTickNotFoundError: If the task does not exist
+            TickTickAPIUnavailableError: If V2 API is not available
+        """
+        self._ensure_initialized()
+
+        if not self._router.has_v2:
+            raise TickTickAPIUnavailableError(
+                "Abandon task requires V2 API (abandoned status is V2-only)",
+                operation="abandon_task",
+            )
+
+        # V2 batch API silently accepts updates to nonexistent tasks (returns
+        # empty etag but no error). Verify task exists first for proper errors.
+        await self._v2_client.get_task(task_id)  # type: ignore  # Raises NotFoundError if missing
+
+        response = await self._v2_client.batch_tasks(  # type: ignore
+            update=[{
+                "id": task_id,
+                "projectId": project_id,
+                "status": TaskStatus.ABANDONED,
+                "completedTime": Task.format_datetime(datetime.now(), "v2"),
+            }]
+        )
+        # Check for errors in batch response (shouldn't happen after verify)
+        _check_batch_response_errors(response, "abandon_task", [task_id])
+
     async def delete_task(self, task_id: str, project_id: str) -> None:
         """
         Delete a task.
@@ -1194,6 +1234,43 @@ class UnifiedTickTickAPI:
 
         response = await self._v2_client.batch_tasks(update=updates)  # type: ignore
         _check_batch_response_errors(response, "batch_complete_tasks", [tid for tid, _ in task_ids])
+        return response
+
+    async def batch_abandon_tasks(
+        self,
+        task_ids: list[tuple[str, str]],
+    ) -> dict[str, Any]:
+        """
+        Abandon ("Won't do") multiple tasks in a batch operation.
+
+        V2-only operation.
+
+        Args:
+            task_ids: List of (task_id, project_id) tuples
+
+        Returns:
+            Batch response with id2etag and id2error
+
+        Raises:
+            TickTickAPIUnavailableError: If V2 API is not available
+        """
+        self._ensure_initialized()
+
+        if not self._router.has_v2:
+            raise TickTickAPIUnavailableError(
+                "V2 API is required for batch_abandon_tasks",
+                operation="batch_abandon_tasks",
+            )
+
+        updates = [{
+            "id": tid,
+            "projectId": pid,
+            "status": TaskStatus.ABANDONED,
+            "completedTime": Task.format_datetime(datetime.now(), "v2"),
+        } for tid, pid in task_ids]
+
+        response = await self._v2_client.batch_tasks(update=updates)  # type: ignore
+        _check_batch_response_errors(response, "batch_abandon_tasks", [tid for tid, _ in task_ids])
         return response
 
     async def batch_move_tasks(

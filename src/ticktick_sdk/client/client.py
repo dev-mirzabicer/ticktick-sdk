@@ -284,6 +284,19 @@ class TickTickClient:
         """
         await self._api.complete_task(task_id, project_id)
 
+    async def abandon_task(self, task_id: str, project_id: str) -> None:
+        """
+        Mark a task as abandoned ("Won't do").
+
+        This is a V2-only operation. Abandoned tasks appear in the
+        "Abandoned" section of completed tasks in TickTick.
+
+        Args:
+            task_id: Task ID
+            project_id: Project ID
+        """
+        await self._api.abandon_task(task_id, project_id)
+
     async def delete_task(self, task_id: str, project_id: str) -> None:
         """
         Delete a task.
@@ -651,6 +664,24 @@ class TickTickClient:
             Batch response with id2etag and id2error
         """
         return await self._api.batch_complete_tasks(task_ids)
+
+    async def abandon_tasks(
+        self,
+        task_ids: list[tuple[str, str]],
+    ) -> dict[str, Any]:
+        """
+        Abandon ("Won't do") one or more tasks.
+
+        This is a V2-only operation. Abandoned tasks appear in the
+        "Abandoned" section of completed tasks in TickTick.
+
+        Args:
+            task_ids: List of (task_id, project_id) tuples
+
+        Returns:
+            Batch response with id2etag and id2error
+        """
+        return await self._api.batch_abandon_tasks(task_ids)
 
     async def move_tasks(
         self,
