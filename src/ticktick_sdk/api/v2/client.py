@@ -1394,9 +1394,20 @@ class TickTickV2Client(BaseTickTickClient):
         status: int | None = None,
         total_checkins: int | None = None,
         current_streak: int | None = None,
+        # Additional fields required for full object updates
+        sort_order: int | None = None,
+        target_start_date: int | None = None,
+        completed_cycles: int | None = None,
+        ex_dates: list[str] | None = None,
+        style: int | None = None,
+        etag: str | None = None,
+        created_time: str | None = None,
     ) -> BatchResponseV2:
         """
         Update a habit.
+
+        IMPORTANT: TickTick's habits/batch API requires full object replacement,
+        not partial updates. All fields must be sent or they will be reset to defaults.
 
         Args:
             habit_id: Habit ID
@@ -1416,6 +1427,13 @@ class TickTickV2Client(BaseTickTickClient):
             status: New status (0=active, 2=archived)
             total_checkins: New total check-ins
             current_streak: New current streak
+            sort_order: Display order
+            target_start_date: Target start date (YYYYMMDD)
+            completed_cycles: Completed cycles count
+            ex_dates: Excluded dates list
+            style: Display style
+            etag: Version tag for concurrency
+            created_time: Creation timestamp (ISO format)
 
         Returns:
             Batch response
@@ -1459,8 +1477,50 @@ class TickTickV2Client(BaseTickTickClient):
             habit["totalCheckIns"] = total_checkins
         if current_streak is not None:
             habit["currentStreak"] = current_streak
+        # Additional fields for full object updates
+        if sort_order is not None:
+            habit["sortOrder"] = sort_order
+        if target_start_date is not None:
+            habit["targetStartDate"] = target_start_date
+        if completed_cycles is not None:
+            habit["completedCycles"] = completed_cycles
+        if ex_dates is not None:
+            habit["exDates"] = ex_dates
+        if style is not None:
+            habit["style"] = style
+        if etag is not None:
+            habit["etag"] = etag
 
         return await self.batch_habits(update=[habit])
+
+    async def full_update_habit(
+        self,
+        habit_data: dict[str, Any],
+    ) -> BatchResponseV2:
+        """
+        Update a habit with a complete data dictionary.
+
+        This method sends the habit data directly to the batch API without
+        filtering out None values. Use this when you need to ensure all
+        fields are included in the update.
+
+        Args:
+            habit_data: Complete habit dictionary with all required fields.
+                       Must include 'id' and should include all fields that
+                       TickTick expects (name, type, goal, etc.)
+
+        Returns:
+            Batch response
+        """
+        from datetime import datetime
+
+        # Ensure modifiedTime is set
+        if "modifiedTime" not in habit_data:
+            habit_data["modifiedTime"] = datetime.now().strftime(
+                "%Y-%m-%dT%H:%M:%S.000+0000"
+            )
+
+        return await self.batch_habits(update=[habit_data])
 
     async def delete_habit(self, habit_id: str) -> BatchResponseV2:
         """

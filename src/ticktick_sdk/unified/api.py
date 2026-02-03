@@ -2357,6 +2357,10 @@ class UnifiedTickTickAPI:
 
         V2-only operation.
 
+        IMPORTANT: This method fetches the original habit first and sends
+        all fields to the API. TickTick's habits/batch API requires full
+        object replacement, not partial updates.
+
         Args:
             habit_id: Habit ID
             name: New name
@@ -2379,22 +2383,36 @@ class UnifiedTickTickAPI:
         """
         self._ensure_initialized()
 
-        # Verify habit exists
-        await self.get_habit(habit_id)  # Raises NotFoundError if missing
+        # Get original habit to preserve all fields
+        # TickTick's batch API requires full object replacement, not partial updates.
+        original_habit = await self.get_habit(habit_id)
 
+        # Merge provided values with original values
         response = await self._v2_client.update_habit(  # type: ignore
             habit_id=habit_id,
-            name=name,
-            goal=goal,
-            step=step,
-            unit=unit,
-            icon=icon,
-            color=color,
-            section_id=section_id,
-            repeat_rule=repeat_rule,
-            reminders=reminders,
-            target_days=target_days,
-            encouragement=encouragement,
+            name=name if name is not None else original_habit.name,
+            habit_type=original_habit.habit_type,
+            goal=goal if goal is not None else original_habit.goal,
+            step=step if step is not None else original_habit.step,
+            unit=unit if unit is not None else original_habit.unit,
+            icon=icon if icon is not None else original_habit.icon,
+            color=color if color is not None else original_habit.color,
+            section_id=section_id if section_id is not None else original_habit.section_id,
+            repeat_rule=repeat_rule if repeat_rule is not None else original_habit.repeat_rule,
+            reminders=reminders if reminders is not None else original_habit.reminders,
+            target_days=target_days if target_days is not None else original_habit.target_days,
+            encouragement=encouragement if encouragement is not None else original_habit.encouragement,
+            record_enable=original_habit.record_enable,
+            status=original_habit.status,
+            total_checkins=original_habit.total_checkins,
+            current_streak=original_habit.current_streak,
+            # Additional fields required for full object replacement
+            sort_order=original_habit.sort_order,
+            target_start_date=original_habit.target_start_date,
+            completed_cycles=original_habit.completed_cycles,
+            ex_dates=original_habit.ex_dates,
+            style=original_habit.style,
+            etag=original_habit.etag,
         )
 
         _check_batch_response_errors(response, "update_habit", [habit_id])
@@ -2486,12 +2504,39 @@ class UnifiedTickTickAPI:
         calculated_total = _count_total_checkins(all_checkins)
 
         # Step 4: Update habit with calculated values
-        response = await self._v2_client.update_habit(  # type: ignore
-            habit_id=habit_id,
-            name=original_habit.name,  # Preserve name!
+        # IMPORTANT: Use to_v2_dict to ensure ALL fields are included.
+        # TickTick's batch API requires full object replacement, not partial updates.
+        # Create a copy of the habit with updated counters
+        updated_habit = Habit(
+            id=original_habit.id,
+            name=original_habit.name,
+            icon=original_habit.icon,
+            color=original_habit.color,
+            sort_order=original_habit.sort_order,
+            status=original_habit.status,
+            encouragement=original_habit.encouragement,
             total_checkins=calculated_total,
+            created_time=original_habit.created_time,
+            modified_time=original_habit.modified_time,
+            archived_time=original_habit.archived_time,
+            habit_type=original_habit.habit_type,
+            goal=original_habit.goal,
+            step=original_habit.step,
+            unit=original_habit.unit,
+            etag=original_habit.etag,
+            repeat_rule=original_habit.repeat_rule,
+            reminders=original_habit.reminders,
+            record_enable=original_habit.record_enable,
+            section_id=original_habit.section_id,
+            target_days=original_habit.target_days,
+            target_start_date=original_habit.target_start_date,
+            completed_cycles=original_habit.completed_cycles,
+            ex_dates=original_habit.ex_dates,
             current_streak=calculated_streak,
+            style=original_habit.style,
         )
+        habit_data = updated_habit.to_v2_dict(for_update=True)
+        response = await self._v2_client.full_update_habit(habit_data)  # type: ignore
 
         _check_batch_response_errors(response, "checkin_habit", [habit_id])
 
@@ -2548,12 +2593,33 @@ class UnifiedTickTickAPI:
         # Get original habit data to preserve
         original_habit = await self.get_habit(habit_id)
 
-        # Use update_habit directly instead of archive_habit to preserve the name
-        # (The API nullifies fields that aren't sent in update operations)
+        # Use update_habit directly instead of archive_habit to preserve all fields
+        # TickTick's batch API requires full object replacement, not partial updates.
         response = await self._v2_client.update_habit(  # type: ignore
             habit_id=habit_id,
-            name=original_habit.name,  # Preserve name!
+            name=original_habit.name,
+            habit_type=original_habit.habit_type,
+            goal=original_habit.goal,
+            step=original_habit.step,
+            unit=original_habit.unit,
+            icon=original_habit.icon,
+            color=original_habit.color,
+            section_id=original_habit.section_id,
+            repeat_rule=original_habit.repeat_rule,
+            reminders=original_habit.reminders,
+            target_days=original_habit.target_days,
+            encouragement=original_habit.encouragement,
+            record_enable=original_habit.record_enable,
+            total_checkins=original_habit.total_checkins,
+            current_streak=original_habit.current_streak,
             status=2,  # Archived
+            # Additional fields required for full object replacement
+            sort_order=original_habit.sort_order,
+            target_start_date=original_habit.target_start_date,
+            completed_cycles=original_habit.completed_cycles,
+            ex_dates=original_habit.ex_dates,
+            style=original_habit.style,
+            etag=original_habit.etag,
         )
         _check_batch_response_errors(response, "archive_habit", [habit_id])
 
@@ -2609,12 +2675,33 @@ class UnifiedTickTickAPI:
         # Get original habit data to preserve
         original_habit = await self.get_habit(habit_id)
 
-        # Use update_habit directly instead of unarchive_habit to preserve the name
-        # (The API nullifies fields that aren't sent in update operations)
+        # Use update_habit directly instead of unarchive_habit to preserve all fields
+        # TickTick's batch API requires full object replacement, not partial updates.
         response = await self._v2_client.update_habit(  # type: ignore
             habit_id=habit_id,
-            name=original_habit.name,  # Preserve name!
+            name=original_habit.name,
+            habit_type=original_habit.habit_type,
+            goal=original_habit.goal,
+            step=original_habit.step,
+            unit=original_habit.unit,
+            icon=original_habit.icon,
+            color=original_habit.color,
+            section_id=original_habit.section_id,
+            repeat_rule=original_habit.repeat_rule,
+            reminders=original_habit.reminders,
+            target_days=original_habit.target_days,
+            encouragement=original_habit.encouragement,
+            record_enable=original_habit.record_enable,
+            total_checkins=original_habit.total_checkins,
+            current_streak=original_habit.current_streak,
             status=0,  # Active
+            # Additional fields required for full object replacement
+            sort_order=original_habit.sort_order,
+            target_start_date=original_habit.target_start_date,
+            completed_cycles=original_habit.completed_cycles,
+            ex_dates=original_habit.ex_dates,
+            style=original_habit.style,
+            etag=original_habit.etag,
         )
         _check_batch_response_errors(response, "unarchive_habit", [habit_id])
 
@@ -2762,12 +2849,37 @@ class UnifiedTickTickAPI:
             calculated_total = _count_total_checkins(all_checkins)
 
             # Update habit with calculated values
-            response = await self._v2_client.update_habit(  # type: ignore
-                habit_id=habit_id,
+            # Use full_update_habit with to_v2_dict to ensure ALL fields are sent
+            updated_habit = Habit(
+                id=original_habit.id,
                 name=original_habit.name,
+                icon=original_habit.icon,
+                color=original_habit.color,
+                sort_order=original_habit.sort_order,
+                status=original_habit.status,
+                encouragement=original_habit.encouragement,
                 total_checkins=calculated_total,
+                created_time=original_habit.created_time,
+                modified_time=original_habit.modified_time,
+                archived_time=original_habit.archived_time,
+                habit_type=original_habit.habit_type,
+                goal=original_habit.goal,
+                step=original_habit.step,
+                unit=original_habit.unit,
+                etag=original_habit.etag,
+                repeat_rule=original_habit.repeat_rule,
+                reminders=original_habit.reminders,
+                record_enable=original_habit.record_enable,
+                section_id=original_habit.section_id,
+                target_days=original_habit.target_days,
+                target_start_date=original_habit.target_start_date,
+                completed_cycles=original_habit.completed_cycles,
+                ex_dates=original_habit.ex_dates,
                 current_streak=calculated_streak,
+                style=original_habit.style,
             )
+            habit_data = updated_habit.to_v2_dict(for_update=True)
+            response = await self._v2_client.full_update_habit(habit_data)  # type: ignore
             _check_batch_response_errors(response, "batch_checkin_habits", [habit_id])
 
             # Build result habit with calculated values
