@@ -124,9 +124,18 @@ class SessionHandler:
         cookies = session.cookies
     """
 
-    # Minimal headers that work (based on pyticktick)
-    # Keep it simple - don't over-engineer with browser-exact headers
-    DEFAULT_USER_AGENT = "Mozilla/5.0 (rv:145.0) Firefox/145.0"
+    # Headers must match what the web app sends to avoid 429 rate limiting
+    # at the AWS ELB level. Origin and Referer headers are required.
+    # Updated Feb 2026 to fix 429 errors - see GitHub issue #33
+    DEFAULT_USER_AGENT = (
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/120.0.0.0 Safari/537.36"
+    )
+
+    # Web app version for X-Device header. The specific version number
+    # doesn't appear to be validated, but the full X-Device format is required.
+    WEB_APP_VERSION = 6430
 
     def __init__(
         self,
@@ -171,26 +180,36 @@ class SessionHandler:
     def _get_x_device_header(self) -> str:
         """Get the x-device header JSON string.
 
-        Uses minimal format that works (based on pyticktick).
-        Only 3 fields: platform, version, id
+        Must use full web app format to avoid 429 rate limiting.
+        The version number is not strictly validated, but the full
+        structure with os/device/channel fields is required.
         """
         import json
 
-        return json.dumps({
-            "platform": "web",
-            "version": 6430,
-            "id": self.device_id,
-        })
+        return json.dumps(
+            {
+                "platform": "web",
+                "os": "macOS 10.15.7",
+                "device": "Chrome 120.0.0.0",
+                "name": "",
+                "version": self.WEB_APP_VERSION,
+                "id": self.device_id,
+                "channel": "website",
+                "campaign": "",
+                "websocket": "",
+            }
+        )
 
     def _get_headers(self) -> dict[str, str]:
         """Get headers for authentication requests.
 
-        Minimal headers - don't over-engineer with browser-exact headers.
-        The API just needs User-Agent and X-Device.
-        Content-Type is added automatically by httpx when using json=.
+        Must include Origin and Referer headers to avoid 429 rate limiting
+        at the AWS ELB level. Updated Feb 2026 - see GitHub issue #33.
         """
         return {
             "User-Agent": self.DEFAULT_USER_AGENT,
+            "Origin": "https://ticktick.com",
+            "Referer": "https://ticktick.com/",
             "X-Device": self._get_x_device_header(),
         }
 
