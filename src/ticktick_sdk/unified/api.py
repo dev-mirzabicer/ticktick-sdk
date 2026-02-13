@@ -10,7 +10,12 @@ and converts between unified models and API-specific formats.
 
 from __future__ import annotations
 
+import base64
+import hashlib
+import hmac
 import logging
+import struct
+import time
 from datetime import date, datetime, timedelta, timezone
 from types import TracebackType
 from typing import Any, TypeVar
@@ -26,7 +31,20 @@ from ticktick_sdk.exceptions import (
     TickTickForbiddenError,
     TickTickNotFoundError,
     TickTickQuotaExceededError,
+    TickTickSessionError,
 )
+
+
+def _generate_totp(secret_b32: str) -> str:
+    """Generate a 6-digit TOTP code from a base32 secret (RFC 6238)."""
+    key = base64.b32decode(secret_b32.upper().replace(" ", ""), casefold=True)
+    counter = struct.pack(">Q", int(time.time()) // 30)
+    mac = hmac.new(key, counter, hashlib.sha1).digest()
+    offset = mac[-1] & 0x0F
+    code = struct.unpack(">I", mac[offset:offset + 4])[0] & 0x7FFFFFFF
+    return str(code % 10**6).zfill(6)
+
+
 from ticktick_sdk.models import (
     Column,
     Task,
@@ -238,6 +256,7 @@ class UnifiedTickTickAPI:
         # V2 Session credentials
         username: str | None = None,
         password: str | None = None,
+        totp_secret: str | None = None,
         # General
         timeout: float = 30.0,
         device_id: str | None = None,
@@ -253,6 +272,7 @@ class UnifiedTickTickAPI:
         self._v2_credentials = {
             "username": username,
             "password": password,
+            "totp_secret": totp_secret,
             "device_id": device_id,
             "timeout": timeout,
         }
@@ -306,10 +326,27 @@ class UnifiedTickTickAPI:
 
             # Authenticate V2 if credentials provided
             if self._v2_credentials["username"] and self._v2_credentials["password"]:
-                session = await self._v2_client.authenticate(
-                    self._v2_credentials["username"],
-                    self._v2_credentials["password"],
-                )
+                try:
+                    session = await self._v2_client.authenticate(
+                        self._v2_credentials["username"],
+                        self._v2_credentials["password"],
+                    )
+                except TickTickSessionError as e:
+                    if e.requires_2fa and e.auth_id:
+                        totp_secret = self._v2_credentials.get("totp_secret")
+                        if totp_secret:
+                            logger.info("2FA required, generating TOTP code")
+                            totp_code = _generate_totp(totp_secret)
+                            session = await self._v2_client.authenticate_2fa(
+                                e.auth_id, totp_code,
+                            )
+                        else:
+                            raise TickTickConfigurationError(
+                                "2FA required but no TOTP secret provided. "
+                                "Set TICKTICK_TOTP_SECRET to your base32 TOTP secret.",
+                            ) from e
+                    else:
+                        raise
                 self._inbox_id = session.inbox_id
                 logger.info("V2 client authenticated")
             else:

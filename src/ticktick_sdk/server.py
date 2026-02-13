@@ -66,6 +66,7 @@ V2 (Session) - Required for most operations:
     TICKTICK_PASSWORD       - TickTick account password
 
 Optional:
+    TICKTICK_TOTP_SECRET    - Base32 TOTP secret for 2FA-enabled accounts
     TICKTICK_REDIRECT_URI   - OAuth2 redirect URI (default: http://localhost:8080/callback)
     TICKTICK_TIMEOUT        - Request timeout in seconds (default: 30)
     TICKTICK_DEVICE_ID      - Device identifier (auto-generated if not set)

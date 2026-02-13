@@ -104,6 +104,14 @@ class Task(TickTickModel):
     # Recurrence
     repeat_flag: str | None = Field(default=None, alias="repeatFlag")
     repeat_from: int | None = Field(default=None, alias="repeatFrom")
+
+    @field_validator("repeat_from", mode="before")
+    @classmethod
+    def parse_repeat_from(cls, v: Any) -> int | None:
+        """Handle empty strings from the API for repeat_from."""
+        if v == "" or v is None:
+            return None
+        return int(v)
     repeat_first_date: datetime | None = Field(default=None, alias="repeatFirstDate")
     repeat_task_id: str | None = Field(default=None, alias="repeatTaskId")
     ex_date: list[str] | None = Field(default=None, alias="exDate")

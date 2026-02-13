@@ -53,6 +53,7 @@ class TickTickSettings(BaseSettings):
         V2 (Session):
             TICKTICK_USERNAME: Account username/email
             TICKTICK_PASSWORD: Account password
+            TICKTICK_TOTP_SECRET: TOTP secret for 2FA (base32, optional)
 
         General:
             TICKTICK_TIMEOUT: Request timeout in seconds (default: 30)
@@ -103,6 +104,10 @@ class TickTickSettings(BaseSettings):
     password: SecretStr = Field(
         default=SecretStr(""),
         description="TickTick account password",
+    )
+    totp_secret: SecretStr | None = Field(
+        default=None,
+        description="TOTP secret (base32) for 2FA-enabled accounts",
     )
 
     # =========================================================================
@@ -247,6 +252,12 @@ class TickTickSettings(BaseSettings):
     def get_v2_password(self) -> str:
         """Get the V2 password value."""
         return self.password.get_secret_value()
+
+    def get_totp_secret(self) -> str | None:
+        """Get the TOTP secret value if available."""
+        if self.totp_secret:
+            return self.totp_secret.get_secret_value()
+        return None
 
 
 # Global settings instance (lazy initialization)
