@@ -69,6 +69,10 @@ Includes full support for [Dida365 (滴答清单)](https://dida365.com) as well.
 
 ---
 
+## Hosted deployment
+
+A hosted deployment is available on [Fronteir AI](https://fronteir.ai/mcp/dev-mirzabicer-ticktick-sdk).
+
 ## Why This Library?
 
 ### The Two-API Problem
