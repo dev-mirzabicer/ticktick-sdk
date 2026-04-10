@@ -12,6 +12,7 @@ Task Management:
     - Create tasks with titles, due dates, priorities, tags, reminders, and recurrence
     - Create subtasks (parent-child relationships)
     - Update, complete, delete, and move tasks between projects
+    - Add, update, and delete checklist items on CHECKLIST tasks
     - List active, completed, and overdue tasks
     - Search tasks by title or content
 
@@ -110,6 +111,10 @@ from ticktick_sdk.tools.inputs import (
     UpdateTasksInput,
     CompleteTasksInput,
     DeleteTasksInput,
+    # Checklist item inputs
+    AddChecklistItemsInput,
+    UpdateChecklistItemInput,
+    DeleteChecklistItemsInput,
     MoveTasksInput,
     SetTaskParentsInput,
     UnparentTasksInput,
@@ -434,6 +439,7 @@ async def ticktick_create_tasks(params: CreateTasksInput, ctx: Context) -> str:
                 - description (str): Checklist description (for CHECKLIST kind)
                 - kind (str): Task type - 'TEXT' (standard task, default), 'NOTE' (note),
                   or 'CHECKLIST' (checklist with subtask items)
+                - items (list[str]): Checklist item titles (auto-sets kind to 'CHECKLIST')
                 - priority (str): 'none', 'low', 'medium', 'high'
                 - start_date (str): Start date in ISO format (REQUIRED for recurrence)
                 - due_date (str): Due date in ISO format
@@ -459,8 +465,8 @@ async def ticktick_create_tasks(params: CreateTasksInput, ctx: Context) -> str:
         Note task (different from standard task):
             tasks=[{"title": "Meeting notes", "kind": "NOTE", "content": "Discussion points..."}]
 
-        Checklist task:
-            tasks=[{"title": "Packing list", "kind": "CHECKLIST"}]
+        Checklist task with items:
+            tasks=[{"title": "Packing list", "kind": "CHECKLIST", "items": ["Clothes", "Toiletries", "Charger"]}]
 
         Recurring task (requires start_date):
             tasks=[{"title": "Daily standup", "start_date": "2026-01-20", "recurrence": "RRULE:FREQ=DAILY"}]
@@ -502,6 +508,8 @@ async def ticktick_create_tasks(params: CreateTasksInput, ctx: Context) -> str:
                 spec["parent_id"] = task_item.parent_id
             if task_item.kind:
                 spec["kind"] = task_item.kind
+            if task_item.items:
+                spec["items"] = task_item.items
 
             task_specs.append(spec)
 
@@ -714,6 +722,9 @@ async def ticktick_update_tasks(params: UpdateTasksInput, ctx: Context) -> str:
                 - recurrence (str): RRULE format for recurring tasks
                 - column_id (str): Kanban column ID for board assignment
                   (use empty string '' to remove from column)
+                - items (list[str]): Replace ALL checklist items (auto-sets kind to 'CHECKLIST').
+                  Use empty list [] to clear all items.
+                  For individual item operations, use the dedicated checklist item tools.
             - response_format (str): 'markdown' (default) or 'json'
 
     Returns:
@@ -722,6 +733,9 @@ async def ticktick_update_tasks(params: UpdateTasksInput, ctx: Context) -> str:
     Examples:
         Update priority:
             tasks=[{"task_id": "abc123", "project_id": "proj1", "priority": "high"}]
+
+        Replace all checklist items:
+            tasks=[{"task_id": "abc123", "project_id": "proj1", "items": ["Step 1", "Step 2", "Step 3"]}]
 
         Convert task to note:
             tasks=[{"task_id": "abc123", "project_id": "proj1", "kind": "NOTE"}]
@@ -771,6 +785,8 @@ async def ticktick_update_tasks(params: UpdateTasksInput, ctx: Context) -> str:
                 spec["column_id"] = task_item.column_id
             if task_item.kind is not None:
                 spec["kind"] = task_item.kind
+            if task_item.items is not None:
+                spec["items"] = task_item.items
 
             update_specs.append(spec)
 
@@ -791,6 +807,171 @@ async def ticktick_update_tasks(params: UpdateTasksInput, ctx: Context) -> str:
 
     except Exception as e:
         return handle_error(e, "update_tasks")
+
+
+# =============================================================================
+# Checklist Item Tools
+# =============================================================================
+
+
+@mcp.tool(
+    name="ticktick_add_checklist_items",
+    annotations={
+        "title": "Add Checklist Items",
+        "readOnlyHint": False,
+        "destructiveHint": False,
+        "idempotentHint": False,
+        "openWorldHint": True,
+    },
+)
+async def ticktick_add_checklist_items(params: AddChecklistItemsInput, ctx: Context) -> str:
+    """
+    Add checklist items to an existing task.
+
+    Appends new checklist items to a task. If the task is not already a CHECKLIST
+    type, it will be converted to one automatically.
+
+    Args:
+        params: Parameters:
+            - task_id (str, required): Task ID to add items to
+            - project_id (str, required): Project ID the task belongs to
+            - items (list[str], required): Checklist item titles to add
+            - response_format (str): 'markdown' (default) or 'json'
+
+    Returns:
+        Updated task with new checklist items
+
+    Examples:
+        Add items to a checklist:
+            task_id="abc123...", project_id="proj123...", items=["Buy milk", "Buy eggs"]
+    """
+    try:
+        client = get_client(ctx)
+        task = await client.add_checklist_items(
+            task_id=params.task_id,
+            project_id=params.project_id,
+            items=params.items,
+        )
+
+        if params.response_format == ResponseFormat.MARKDOWN:
+            return f"# Checklist Items Added\n\n{format_task_markdown(task)}"
+        else:
+            return json.dumps({
+                "success": True,
+                "items_added": len(params.items),
+                "task": format_task_json(task),
+            }, indent=2)
+
+    except Exception as e:
+        return handle_error(e, "add_checklist_items")
+
+
+@mcp.tool(
+    name="ticktick_update_checklist_item",
+    annotations={
+        "title": "Update Checklist Item",
+        "readOnlyHint": False,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": True,
+    },
+)
+async def ticktick_update_checklist_item(params: UpdateChecklistItemInput, ctx: Context) -> str:
+    """
+    Update a single checklist item on a task.
+
+    Use ticktick_get_task first to see checklist item IDs, then update by ID.
+
+    Args:
+        params: Parameters:
+            - task_id (str, required): Task ID containing the item
+            - project_id (str, required): Project ID the task belongs to
+            - item_id (str, required): Checklist item ID to update
+            - title (str, optional): New title for the item
+            - is_completed (bool, optional): true to complete, false to uncomplete
+            - response_format (str): 'markdown' (default) or 'json'
+
+    Returns:
+        Updated task
+
+    Examples:
+        Complete a checklist item:
+            task_id="abc123...", project_id="proj123...", item_id="item456...", is_completed=true
+
+        Rename a checklist item:
+            task_id="abc123...", project_id="proj123...", item_id="item456...", title="New title"
+    """
+    try:
+        client = get_client(ctx)
+        task = await client.update_checklist_item(
+            task_id=params.task_id,
+            project_id=params.project_id,
+            item_id=params.item_id,
+            title=params.title,
+            is_completed=params.is_completed,
+        )
+
+        if params.response_format == ResponseFormat.MARKDOWN:
+            return f"# Checklist Item Updated\n\n{format_task_markdown(task)}"
+        else:
+            return json.dumps({
+                "success": True,
+                "task": format_task_json(task),
+            }, indent=2)
+
+    except Exception as e:
+        return handle_error(e, "update_checklist_item")
+
+
+@mcp.tool(
+    name="ticktick_delete_checklist_items",
+    annotations={
+        "title": "Delete Checklist Items",
+        "readOnlyHint": False,
+        "destructiveHint": True,
+        "idempotentHint": True,
+        "openWorldHint": True,
+    },
+)
+async def ticktick_delete_checklist_items(params: DeleteChecklistItemsInput, ctx: Context) -> str:
+    """
+    Delete checklist items from a task.
+
+    Use ticktick_get_task first to see checklist item IDs, then delete by ID.
+
+    Args:
+        params: Parameters:
+            - task_id (str, required): Task ID to remove items from
+            - project_id (str, required): Project ID the task belongs to
+            - item_ids (list[str], required): Checklist item IDs to delete
+            - response_format (str): 'markdown' (default) or 'json'
+
+    Returns:
+        Updated task with items removed
+
+    Examples:
+        Delete items:
+            task_id="abc123...", project_id="proj123...", item_ids=["item1", "item2"]
+    """
+    try:
+        client = get_client(ctx)
+        task = await client.delete_checklist_items(
+            task_id=params.task_id,
+            project_id=params.project_id,
+            item_ids=params.item_ids,
+        )
+
+        if params.response_format == ResponseFormat.MARKDOWN:
+            return f"# Checklist Items Deleted\n\n{format_task_markdown(task)}"
+        else:
+            return json.dumps({
+                "success": True,
+                "items_deleted": len(params.item_ids),
+                "task": format_task_json(task),
+            }, indent=2)
+
+    except Exception as e:
+        return handle_error(e, "delete_checklist_items")
 
 
 @mcp.tool(

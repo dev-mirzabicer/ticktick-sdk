@@ -246,7 +246,7 @@ ticktick-sdk server --enabledModules tasks,projects
 # Enable specific tools only
 ticktick-sdk server --enabledTools ticktick_create_tasks,ticktick_list_tasks
 
-# Available modules: tasks, projects, folders, columns, tags, habits, user, focus
+# Available modules: tasks, checklist_items, projects, folders, columns, tags, habits, user, focus
 ```
 
 ### Example Conversations

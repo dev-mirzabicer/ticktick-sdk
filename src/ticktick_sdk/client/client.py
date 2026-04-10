@@ -219,6 +219,7 @@ class TickTickClient:
         recurrence: str | None = None,
         tags: list[str] | None = None,
         parent_id: str | None = None,
+        items: list[str] | None = None,
     ) -> Task:
         """
         Create a new task.
@@ -237,6 +238,7 @@ class TickTickClient:
             recurrence: Recurrence rule (RRULE format)
             tags: List of tag names
             parent_id: Parent task ID (for subtasks)
+            items: Checklist item titles (auto-sets kind to CHECKLIST)
 
         Returns:
             Created task
@@ -260,6 +262,7 @@ class TickTickClient:
             repeat_flag=recurrence,
             tags=tags,
             parent_id=parent_id,
+            items=items,
         )
 
     async def update_task(self, task: Task) -> Task:
@@ -293,6 +296,126 @@ class TickTickClient:
             project_id: Project ID
         """
         await self._api.delete_task(task_id, project_id)
+
+    # =========================================================================
+    # Checklist Item Operations
+    # =========================================================================
+
+    async def add_checklist_items(
+        self,
+        task_id: str,
+        project_id: str,
+        items: list[str],
+    ) -> Task:
+        """
+        Add checklist items to a task.
+
+        Fetches the task, appends new items, and updates. Auto-sets
+        kind to CHECKLIST if not already set.
+
+        Args:
+            task_id: Task ID
+            project_id: Project ID
+            items: List of checklist item titles to add
+
+        Returns:
+            Updated task with new items
+        """
+        from ticktick_sdk.models.task import ChecklistItem
+        from ticktick_sdk.settings import _generate_object_id
+
+        task = await self.get_task(task_id, project_id)
+
+        if task.kind != "CHECKLIST":
+            task.kind = "CHECKLIST"
+
+        start_order = len(task.items)
+        for i, title in enumerate(items):
+            task.items.append(ChecklistItem(
+                id=_generate_object_id(),
+                title=title,
+                status=0,
+                sort_order=start_order + i,
+            ))
+
+        return await self.update_task(task)
+
+    async def update_checklist_item(
+        self,
+        task_id: str,
+        project_id: str,
+        item_id: str,
+        *,
+        title: str | None = None,
+        is_completed: bool | None = None,
+    ) -> Task:
+        """
+        Update a single checklist item on a task.
+
+        Args:
+            task_id: Task ID
+            project_id: Project ID
+            item_id: Checklist item ID to update
+            title: New title (if changing)
+            is_completed: Set completion status (if changing)
+
+        Returns:
+            Updated task
+
+        Raises:
+            TickTickNotFoundError: If item_id not found on the task
+        """
+        from ticktick_sdk.exceptions import TickTickNotFoundError
+
+        task = await self.get_task(task_id, project_id)
+
+        item = next((i for i in task.items if i.id == item_id), None)
+        if item is None:
+            raise TickTickNotFoundError(
+                f"Checklist item '{item_id}' not found on task '{task_id}'"
+            )
+
+        if title is not None:
+            item.title = title
+        if is_completed is not None:
+            item.status = 1 if is_completed else 0
+
+        return await self.update_task(task)
+
+    async def delete_checklist_items(
+        self,
+        task_id: str,
+        project_id: str,
+        item_ids: list[str],
+    ) -> Task:
+        """
+        Delete checklist items from a task.
+
+        Args:
+            task_id: Task ID
+            project_id: Project ID
+            item_ids: List of checklist item IDs to remove
+
+        Returns:
+            Updated task with items removed
+
+        Raises:
+            TickTickNotFoundError: If any item_id not found on the task
+        """
+        from ticktick_sdk.exceptions import TickTickNotFoundError
+
+        task = await self.get_task(task_id, project_id)
+
+        ids_to_remove = set(item_ids)
+        existing_ids = {i.id for i in task.items}
+        missing = ids_to_remove - existing_ids
+        if missing:
+            raise TickTickNotFoundError(
+                f"Checklist item(s) not found on task '{task_id}': {', '.join(missing)}"
+            )
+
+        task.items = [i for i in task.items if i.id not in ids_to_remove]
+        return await self.update_task(task)
 
     async def get_completed_tasks(
         self,

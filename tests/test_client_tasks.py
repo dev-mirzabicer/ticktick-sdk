@@ -241,6 +241,32 @@ class TestTaskCreation:
         assert task.priority == TaskPriority.HIGH
         assert set(task.tags) == {"comprehensive", "test"}
 
+    async def test_create_task_with_checklist_items(self, client: TickTickClient):
+        """Test creating a checklist task with items."""
+        task = await client.create_task(
+            title="Shopping List",
+            items=["Buy milk", "Buy eggs", "Buy bread"],
+        )
+
+        assert task.title == "Shopping List"
+        assert len(task.items) == 3
+        assert task.items[0].title == "Buy milk"
+        assert task.items[1].title == "Buy eggs"
+        assert task.items[2].title == "Buy bread"
+
+    async def test_create_task_items_auto_sets_kind(self, client: TickTickClient, mock_api: MockUnifiedAPI):
+        """Test that providing items auto-sets kind to CHECKLIST."""
+        task = await client.create_task(
+            title="Checklist",
+            items=["Item 1", "Item 2"],
+        )
+
+        # Verify items were passed to the unified API
+        calls = mock_api.get_calls("create_task")
+        assert len(calls) == 1
+        _, kwargs = calls[0]
+        assert kwargs.get("items") == ["Item 1", "Item 2"]
+
     async def test_quick_add(self, client: TickTickClient):
         """Test quick_add convenience method."""
         task = await client.quick_add("Quick task text")
@@ -253,6 +279,115 @@ class TestTaskCreation:
         task = await client.quick_add("Quick task", project_id=project.id)
 
         assert task.project_id == project.id
+
+
+# =============================================================================
+# Checklist Item Tests
+# =============================================================================
+
+
+class TestChecklistItems:
+    """Tests for checklist item add/update/delete operations."""
+
+    async def test_add_checklist_items(self, client: TickTickClient, mock_api: MockUnifiedAPI):
+        """Test adding checklist items to a task."""
+        task = await client.create_task(title="My Checklist", items=["Item 1"])
+
+        updated = await client.add_checklist_items(
+            task_id=task.id,
+            project_id=task.project_id,
+            items=["Item 2", "Item 3"],
+        )
+
+        assert len(updated.items) == 3
+        assert updated.items[1].title == "Item 2"
+        assert updated.items[2].title == "Item 3"
+
+    async def test_add_checklist_items_sets_kind(self, client: TickTickClient, mock_api: MockUnifiedAPI):
+        """Test that adding items to a non-checklist task sets kind to CHECKLIST."""
+        task = await client.create_task(title="Plain Task")
+        assert task.kind != "CHECKLIST"
+
+        updated = await client.add_checklist_items(
+            task_id=task.id,
+            project_id=task.project_id,
+            items=["New item"],
+        )
+
+        assert updated.kind == "CHECKLIST"
+        assert len(updated.items) == 1
+
+    async def test_update_checklist_item_title(self, client: TickTickClient, mock_api: MockUnifiedAPI):
+        """Test updating a checklist item's title."""
+        task = await client.create_task(title="Checklist", items=["Original"])
+        item_id = task.items[0].id
+
+        updated = await client.update_checklist_item(
+            task_id=task.id,
+            project_id=task.project_id,
+            item_id=item_id,
+            title="Renamed",
+        )
+
+        assert updated.items[0].title == "Renamed"
+
+    async def test_update_checklist_item_complete(self, client: TickTickClient, mock_api: MockUnifiedAPI):
+        """Test completing a checklist item."""
+        task = await client.create_task(title="Checklist", items=["Do this"])
+        item_id = task.items[0].id
+
+        updated = await client.update_checklist_item(
+            task_id=task.id,
+            project_id=task.project_id,
+            item_id=item_id,
+            is_completed=True,
+        )
+
+        assert updated.items[0].is_completed is True
+
+    async def test_update_checklist_item_not_found(self, client: TickTickClient, mock_api: MockUnifiedAPI):
+        """Test updating a nonexistent checklist item raises error."""
+        from ticktick_sdk.exceptions import TickTickNotFoundError
+
+        task = await client.create_task(title="Checklist", items=["Item"])
+
+        with pytest.raises(TickTickNotFoundError):
+            await client.update_checklist_item(
+                task_id=task.id,
+                project_id=task.project_id,
+                item_id="nonexistent_id",
+                title="New title",
+            )
+
+    async def test_delete_checklist_items(self, client: TickTickClient, mock_api: MockUnifiedAPI):
+        """Test deleting checklist items."""
+        task = await client.create_task(
+            title="Checklist",
+            items=["Keep", "Remove 1", "Remove 2"],
+        )
+        remove_ids = [task.items[1].id, task.items[2].id]
+
+        updated = await client.delete_checklist_items(
+            task_id=task.id,
+            project_id=task.project_id,
+            item_ids=remove_ids,
+        )
+
+        assert len(updated.items) == 1
+        assert updated.items[0].title == "Keep"
+
+    async def test_delete_checklist_items_not_found(self, client: TickTickClient, mock_api: MockUnifiedAPI):
+        """Test deleting nonexistent checklist items raises error."""
+        from ticktick_sdk.exceptions import TickTickNotFoundError
+
+        task = await client.create_task(title="Checklist", items=["Item"])
+
+        with pytest.raises(TickTickNotFoundError):
+            await client.delete_checklist_items(
+                task_id=task.id,
+                project_id=task.project_id,
+                item_ids=["nonexistent_id"],
+            )
 
 
 # =============================================================================

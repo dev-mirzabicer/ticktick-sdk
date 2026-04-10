@@ -95,6 +95,11 @@ TOOL_MODULES = {
         "ticktick_get_statistics",
         "ticktick_get_preferences",
     ],
+    "checklist_items": [
+        "ticktick_add_checklist_items",
+        "ticktick_update_checklist_item",
+        "ticktick_delete_checklist_items",
+    ],
     "focus": [
         "ticktick_focus_heatmap",
         "ticktick_focus_by_tag",
@@ -316,7 +321,7 @@ Tool Filtering (reduces context window usage):
   Use --enabledTools or --enabledModules to load only the tools you need.
   This can significantly reduce context usage from ~30-40% to ~5-10%.
 
-Available modules: tasks, projects, folders, columns, tags, habits, user, focus
+Available modules: tasks, checklist_items, projects, folders, columns, tags, habits, user, focus
 """,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -339,7 +344,7 @@ Available modules: tasks, projects, folders, columns, tags, habits, user, focus
         metavar="MODULES",
         help=(
             "Comma-separated list of tool modules to enable. "
-            "Available: tasks, projects, folders, columns, tags, habits, user, focus. "
+            "Available: tasks, checklist_items, projects, folders, columns, tags, habits, user, focus. "
             "Example: --enabledModules tasks,projects"
         ),
     )

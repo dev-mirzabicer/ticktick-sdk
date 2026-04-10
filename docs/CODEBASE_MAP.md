@@ -872,6 +872,7 @@ ticktick-sdk --help       # Show help
 
 **Tool Modules** (for `--enabledModules`):
 - `tasks`: Task CRUD and management tools
+- `checklist_items`: Checklist item add/update/delete tools
 - `projects`: Project management tools
 - `folders`: Folder management tools
 - `columns`: Kanban column tools
