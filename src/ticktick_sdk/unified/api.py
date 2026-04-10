@@ -448,6 +448,36 @@ class UnifiedTickTickAPI:
             operation="get_task",
         )
 
+    @staticmethod
+    def _normalize_checklist_items(
+        items: list[dict[str, Any]] | list[str] | None,
+    ) -> list[dict[str, Any]] | None:
+        """Normalize checklist items to V2 API format.
+
+        Accepts either a list of title strings or a list of dicts.
+        Generates IDs and defaults for items that need them.
+        """
+        if not items:
+            return None
+        result = []
+        for i, item in enumerate(items):
+            if isinstance(item, str):
+                result.append({
+                    "id": _generate_object_id(),
+                    "title": item,
+                    "status": 0,
+                    "sortOrder": i,
+                })
+            elif isinstance(item, dict):
+                if "id" not in item:
+                    item["id"] = _generate_object_id()
+                if "status" not in item:
+                    item["status"] = 0
+                if "sortOrder" not in item:
+                    item["sortOrder"] = i
+                result.append(item)
+        return result or None
+
     async def create_task(
         self,
         title: str,
@@ -465,6 +495,7 @@ class UnifiedTickTickAPI:
         repeat_flag: str | None = None,
         tags: list[str] | None = None,
         parent_id: str | None = None,
+        items: list[dict[str, Any]] | list[str] | None = None,
     ) -> Task:
         """
         Create a new task.
@@ -486,6 +517,7 @@ class UnifiedTickTickAPI:
             repeat_flag: Recurrence rule
             tags: List of tags (V2 only)
             parent_id: Parent task ID for subtasks (V2 only)
+            items: Checklist items (list of title strings or dicts)
 
         Returns:
             Created task
@@ -513,6 +545,11 @@ class UnifiedTickTickAPI:
         start_str = Task.format_datetime(start_date, "v2") if start_date else None
         due_str = Task.format_datetime(due_date, "v2") if due_date else None
 
+        # Normalize checklist items and auto-set kind
+        normalized_items = self._normalize_checklist_items(items)
+        if normalized_items and kind is None:
+            kind = "CHECKLIST"
+
         # V2 is REQUIRED (not optional fallback)
         if not self._router.has_v2:
             raise TickTickAPIUnavailableError(
@@ -534,6 +571,7 @@ class UnifiedTickTickAPI:
             reminders=[{"trigger": r} for r in reminders] if reminders else None,
             repeat_flag=repeat_flag,
             tags=tags,
+            items=normalized_items,
             # Note: parent_id is NOT passed here - V2 API ignores it during creation
             # We set it separately below via set_task_parent
         )
@@ -997,13 +1035,19 @@ class UnifiedTickTickAPI:
                 if isinstance(priority, str):
                     priority = int(priority)
 
+            # Normalize checklist items and auto-set kind
+            normalized_items = self._normalize_checklist_items(task_spec.get("items"))
+            kind = task_spec.get("kind")
+            if normalized_items and kind is None:
+                kind = "CHECKLIST"
+
             # Create the task
             response = await self._v2_client.create_task(  # type: ignore
                 title=title,
                 project_id=project_id,
                 content=task_spec.get("content"),
                 desc=task_spec.get("description"),
-                kind=task_spec.get("kind"),
+                kind=kind,
                 priority=priority,
                 start_date=start_date,
                 due_date=due_date,
@@ -1012,6 +1056,7 @@ class UnifiedTickTickAPI:
                 reminders=reminders,
                 repeat_flag=task_spec.get("recurrence"),
                 tags=task_spec.get("tags"),
+                items=normalized_items,
             )
 
             # Get the created task ID

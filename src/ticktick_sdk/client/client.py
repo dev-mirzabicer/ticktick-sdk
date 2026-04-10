@@ -219,6 +219,7 @@ class TickTickClient:
         recurrence: str | None = None,
         tags: list[str] | None = None,
         parent_id: str | None = None,
+        items: list[str] | None = None,
     ) -> Task:
         """
         Create a new task.
@@ -237,6 +238,7 @@ class TickTickClient:
             recurrence: Recurrence rule (RRULE format)
             tags: List of tag names
             parent_id: Parent task ID (for subtasks)
+            items: Checklist item titles (auto-sets kind to CHECKLIST)
 
         Returns:
             Created task
@@ -260,6 +262,7 @@ class TickTickClient:
             repeat_flag=recurrence,
             tags=tags,
             parent_id=parent_id,
+            items=items,
         )
 
     async def update_task(self, task: Task) -> Task:

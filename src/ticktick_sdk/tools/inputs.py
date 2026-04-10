@@ -120,6 +120,15 @@ class TaskCreateItem(BaseModel):
         ),
         pattern=r"^(TEXT|NOTE|CHECKLIST)$",
     )
+    items: Optional[List[str]] = Field(
+        default=None,
+        description=(
+            "Checklist item titles. Only used when kind='CHECKLIST'. "
+            "Each string becomes a checklist item. "
+            "Example: ['Buy milk', 'Buy eggs', 'Buy bread']"
+        ),
+        max_length=100,
+    )
 
     @field_validator("priority")
     @classmethod
@@ -127,6 +136,15 @@ class TaskCreateItem(BaseModel):
         if v is None:
             return None
         return v.lower()
+
+    @field_validator("items")
+    @classmethod
+    def validate_items(cls, v: Optional[List[str]]) -> Optional[List[str]]:
+        if v is not None:
+            for item in v:
+                if not item.strip():
+                    raise ValueError("Checklist item titles must not be empty")
+        return v
 
 
 class CreateTasksInput(BaseMCPInput):

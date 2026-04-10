@@ -643,6 +643,29 @@ class MockUnifiedAPI:
         # Filter out None values to allow factory defaults to apply
         filtered_kwargs = {k: v for k, v in kwargs.items() if v is not None}
 
+        # Convert raw items (strings/dicts) to ChecklistItem objects for TaskFactory
+        if "items" in filtered_kwargs:
+            raw_items = filtered_kwargs["items"]
+            checklist_items = []
+            for i, item in enumerate(raw_items):
+                if isinstance(item, str):
+                    checklist_items.append(ChecklistItem(
+                        id=IDGenerator.task_id(),
+                        title=item,
+                        status=0,
+                        sort_order=i,
+                    ))
+                elif isinstance(item, dict):
+                    checklist_items.append(ChecklistItem(
+                        id=item.get("id", IDGenerator.task_id()),
+                        title=item.get("title"),
+                        status=item.get("status", 0),
+                        sort_order=item.get("sortOrder", i),
+                    ))
+                elif isinstance(item, ChecklistItem):
+                    checklist_items.append(item)
+            filtered_kwargs["items"] = checklist_items
+
         task = TaskFactory.create(
             title=title,
             project_id=project_id or self.inbox_id,

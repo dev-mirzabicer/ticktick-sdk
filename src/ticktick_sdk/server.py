@@ -434,6 +434,7 @@ async def ticktick_create_tasks(params: CreateTasksInput, ctx: Context) -> str:
                 - description (str): Checklist description (for CHECKLIST kind)
                 - kind (str): Task type - 'TEXT' (standard task, default), 'NOTE' (note),
                   or 'CHECKLIST' (checklist with subtask items)
+                - items (list[str]): Checklist item titles (auto-sets kind to 'CHECKLIST')
                 - priority (str): 'none', 'low', 'medium', 'high'
                 - start_date (str): Start date in ISO format (REQUIRED for recurrence)
                 - due_date (str): Due date in ISO format
@@ -459,8 +460,8 @@ async def ticktick_create_tasks(params: CreateTasksInput, ctx: Context) -> str:
         Note task (different from standard task):
             tasks=[{"title": "Meeting notes", "kind": "NOTE", "content": "Discussion points..."}]
 
-        Checklist task:
-            tasks=[{"title": "Packing list", "kind": "CHECKLIST"}]
+        Checklist task with items:
+            tasks=[{"title": "Packing list", "kind": "CHECKLIST", "items": ["Clothes", "Toiletries", "Charger"]}]
 
         Recurring task (requires start_date):
             tasks=[{"title": "Daily standup", "start_date": "2026-01-20", "recurrence": "RRULE:FREQ=DAILY"}]
@@ -502,6 +503,8 @@ async def ticktick_create_tasks(params: CreateTasksInput, ctx: Context) -> str:
                 spec["parent_id"] = task_item.parent_id
             if task_item.kind:
                 spec["kind"] = task_item.kind
+            if task_item.items:
+                spec["items"] = task_item.items
 
             task_specs.append(spec)
 

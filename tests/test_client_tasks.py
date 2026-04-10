@@ -241,6 +241,32 @@ class TestTaskCreation:
         assert task.priority == TaskPriority.HIGH
         assert set(task.tags) == {"comprehensive", "test"}
 
+    async def test_create_task_with_checklist_items(self, client: TickTickClient):
+        """Test creating a checklist task with items."""
+        task = await client.create_task(
+            title="Shopping List",
+            items=["Buy milk", "Buy eggs", "Buy bread"],
+        )
+
+        assert task.title == "Shopping List"
+        assert len(task.items) == 3
+        assert task.items[0].title == "Buy milk"
+        assert task.items[1].title == "Buy eggs"
+        assert task.items[2].title == "Buy bread"
+
+    async def test_create_task_items_auto_sets_kind(self, client: TickTickClient, mock_api: MockUnifiedAPI):
+        """Test that providing items auto-sets kind to CHECKLIST."""
+        task = await client.create_task(
+            title="Checklist",
+            items=["Item 1", "Item 2"],
+        )
+
+        # Verify items were passed to the unified API
+        calls = mock_api.get_calls("create_task")
+        assert len(calls) == 1
+        _, kwargs = calls[0]
+        assert kwargs.get("items") == ["Item 1", "Item 2"]
+
     async def test_quick_add(self, client: TickTickClient):
         """Test quick_add convenience method."""
         task = await client.quick_add("Quick task text")
