@@ -1167,6 +1167,18 @@ class UnifiedTickTickAPI:
                 v2_update["columnId"] = update["column_id"] if update["column_id"] else ""
             if "kind" in update and update["kind"] is not None:
                 v2_update["kind"] = update["kind"]
+            if "items" in update:
+                raw_items = update["items"]
+                if raw_items is not None:
+                    normalized = self._normalize_checklist_items(raw_items)
+                    if normalized:
+                        v2_update["items"] = normalized
+                        if "kind" not in v2_update:
+                            v2_update["kind"] = "CHECKLIST"
+                    else:
+                        v2_update["items"] = []
+                else:
+                    v2_update["items"] = []
 
             v2_updates.append(v2_update)
 

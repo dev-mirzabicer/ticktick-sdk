@@ -282,6 +282,115 @@ class TestTaskCreation:
 
 
 # =============================================================================
+# Checklist Item Tests
+# =============================================================================
+
+
+class TestChecklistItems:
+    """Tests for checklist item add/update/delete operations."""
+
+    async def test_add_checklist_items(self, client: TickTickClient, mock_api: MockUnifiedAPI):
+        """Test adding checklist items to a task."""
+        task = await client.create_task(title="My Checklist", items=["Item 1"])
+
+        updated = await client.add_checklist_items(
+            task_id=task.id,
+            project_id=task.project_id,
+            items=["Item 2", "Item 3"],
+        )
+
+        assert len(updated.items) == 3
+        assert updated.items[1].title == "Item 2"
+        assert updated.items[2].title == "Item 3"
+
+    async def test_add_checklist_items_sets_kind(self, client: TickTickClient, mock_api: MockUnifiedAPI):
+        """Test that adding items to a non-checklist task sets kind to CHECKLIST."""
+        task = await client.create_task(title="Plain Task")
+        assert task.kind != "CHECKLIST"
+
+        updated = await client.add_checklist_items(
+            task_id=task.id,
+            project_id=task.project_id,
+            items=["New item"],
+        )
+
+        assert updated.kind == "CHECKLIST"
+        assert len(updated.items) == 1
+
+    async def test_update_checklist_item_title(self, client: TickTickClient, mock_api: MockUnifiedAPI):
+        """Test updating a checklist item's title."""
+        task = await client.create_task(title="Checklist", items=["Original"])
+        item_id = task.items[0].id
+
+        updated = await client.update_checklist_item(
+            task_id=task.id,
+            project_id=task.project_id,
+            item_id=item_id,
+            title="Renamed",
+        )
+
+        assert updated.items[0].title == "Renamed"
+
+    async def test_update_checklist_item_complete(self, client: TickTickClient, mock_api: MockUnifiedAPI):
+        """Test completing a checklist item."""
+        task = await client.create_task(title="Checklist", items=["Do this"])
+        item_id = task.items[0].id
+
+        updated = await client.update_checklist_item(
+            task_id=task.id,
+            project_id=task.project_id,
+            item_id=item_id,
+            is_completed=True,
+        )
+
+        assert updated.items[0].is_completed is True
+
+    async def test_update_checklist_item_not_found(self, client: TickTickClient, mock_api: MockUnifiedAPI):
+        """Test updating a nonexistent checklist item raises error."""
+        from ticktick_sdk.exceptions import TickTickNotFoundError
+
+        task = await client.create_task(title="Checklist", items=["Item"])
+
+        with pytest.raises(TickTickNotFoundError):
+            await client.update_checklist_item(
+                task_id=task.id,
+                project_id=task.project_id,
+                item_id="nonexistent_id",
+                title="New title",
+            )
+
+    async def test_delete_checklist_items(self, client: TickTickClient, mock_api: MockUnifiedAPI):
+        """Test deleting checklist items."""
+        task = await client.create_task(
+            title="Checklist",
+            items=["Keep", "Remove 1", "Remove 2"],
+        )
+        remove_ids = [task.items[1].id, task.items[2].id]
+
+        updated = await client.delete_checklist_items(
+            task_id=task.id,
+            project_id=task.project_id,
+            item_ids=remove_ids,
+        )
+
+        assert len(updated.items) == 1
+        assert updated.items[0].title == "Keep"
+
+    async def test_delete_checklist_items_not_found(self, client: TickTickClient, mock_api: MockUnifiedAPI):
+        """Test deleting nonexistent checklist items raises error."""
+        from ticktick_sdk.exceptions import TickTickNotFoundError
+
+        task = await client.create_task(title="Checklist", items=["Item"])
+
+        with pytest.raises(TickTickNotFoundError):
+            await client.delete_checklist_items(
+                task_id=task.id,
+                project_id=task.project_id,
+                item_ids=["nonexistent_id"],
+            )
+
+
+# =============================================================================
 # Task Retrieval Tests
 # =============================================================================
 

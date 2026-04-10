@@ -231,6 +231,24 @@ class TaskUpdateItem(BaseModel):
         ),
         pattern=r"^(TEXT|NOTE|CHECKLIST)$",
     )
+    items: Optional[List[str]] = Field(
+        default=None,
+        description=(
+            "Replace ALL checklist items with this list. Auto-sets kind to 'CHECKLIST'. "
+            "Use an empty list to clear all items. "
+            "For adding/updating/deleting individual items, use the dedicated checklist item tools instead."
+        ),
+        max_length=100,
+    )
+
+    @field_validator("items")
+    @classmethod
+    def validate_items(cls, v: Optional[List[str]]) -> Optional[List[str]]:
+        if v is not None:
+            for item in v:
+                if not item.strip():
+                    raise ValueError("Checklist item titles must not be empty")
+        return v
 
 
 class UpdateTasksInput(BaseMCPInput):
@@ -245,6 +263,102 @@ class UpdateTasksInput(BaseMCPInput):
     response_format: ResponseFormat = Field(
         default=ResponseFormat.MARKDOWN,
         description="Output format",
+    )
+
+
+# =============================================================================
+# Checklist Item Input Models
+# =============================================================================
+
+
+class AddChecklistItemsInput(BaseMCPInput):
+    """Add checklist items to an existing task."""
+
+    task_id: str = Field(
+        ...,
+        description="Task ID to add checklist items to",
+        pattern=r"^[a-f0-9]{24}$",
+    )
+    project_id: str = Field(
+        ...,
+        description="Project ID the task belongs to",
+        pattern=r"^(inbox\d+|[a-f0-9]{24})$",
+    )
+    items: List[str] = Field(
+        ...,
+        description="Checklist item titles to add (e.g., ['Buy milk', 'Buy eggs'])",
+        min_length=1,
+        max_length=100,
+    )
+    response_format: ResponseFormat = Field(
+        default=ResponseFormat.MARKDOWN,
+        description="Output format: 'markdown' or 'json'",
+    )
+
+    @field_validator("items")
+    @classmethod
+    def validate_items(cls, v: List[str]) -> List[str]:
+        for item in v:
+            if not item.strip():
+                raise ValueError("Checklist item titles must not be empty")
+        return v
+
+
+class UpdateChecklistItemInput(BaseMCPInput):
+    """Update a single checklist item on a task."""
+
+    task_id: str = Field(
+        ...,
+        description="Task ID containing the checklist item",
+        pattern=r"^[a-f0-9]{24}$",
+    )
+    project_id: str = Field(
+        ...,
+        description="Project ID the task belongs to",
+        pattern=r"^(inbox\d+|[a-f0-9]{24})$",
+    )
+    item_id: str = Field(
+        ...,
+        description="Checklist item ID to update",
+    )
+    title: Optional[str] = Field(
+        default=None,
+        description="New title for the checklist item",
+        min_length=1,
+        max_length=500,
+    )
+    is_completed: Optional[bool] = Field(
+        default=None,
+        description="Set to true to mark complete, false to mark incomplete",
+    )
+    response_format: ResponseFormat = Field(
+        default=ResponseFormat.MARKDOWN,
+        description="Output format: 'markdown' or 'json'",
+    )
+
+
+class DeleteChecklistItemsInput(BaseMCPInput):
+    """Delete checklist items from a task."""
+
+    task_id: str = Field(
+        ...,
+        description="Task ID to delete checklist items from",
+        pattern=r"^[a-f0-9]{24}$",
+    )
+    project_id: str = Field(
+        ...,
+        description="Project ID the task belongs to",
+        pattern=r"^(inbox\d+|[a-f0-9]{24})$",
+    )
+    item_ids: List[str] = Field(
+        ...,
+        description="List of checklist item IDs to delete",
+        min_length=1,
+        max_length=100,
+    )
+    response_format: ResponseFormat = Field(
+        default=ResponseFormat.MARKDOWN,
+        description="Output format: 'markdown' or 'json'",
     )
 
 
