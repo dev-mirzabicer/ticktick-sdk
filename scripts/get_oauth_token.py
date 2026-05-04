@@ -18,7 +18,7 @@ The script will:
 
 import argparse
 import asyncio
-import secrets
+import html
 import webbrowser
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import parse_qs, urlparse
@@ -80,9 +80,9 @@ class OAuthCallbackHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(html.encode())
 
-    def _send_error_response(self, error: str = None):
+    def _send_error_response(self, error: str | None = None):
         """Send error HTML response."""
-        error_msg = error or OAuthCallbackHandler.error or "Unknown error"
+        error_msg = html.escape(error or OAuthCallbackHandler.error or "Unknown error")
         html = f"""
         <!DOCTYPE html>
         <html>
@@ -128,9 +128,9 @@ async def run_auto_mode(handler: OAuth2Handler, auth_url: str):
 
     if OAuthCallbackHandler.error:
         print(f"ERROR: Authorization failed: {OAuthCallbackHandler.error}")
-        return None
+        return None, None
 
-    return OAuthCallbackHandler.authorization_code
+    return OAuthCallbackHandler.authorization_code, OAuthCallbackHandler.state
 
 
 async def run_manual_mode(handler: OAuth2Handler, auth_url: str):
@@ -158,16 +158,23 @@ async def run_manual_mode(handler: OAuth2Handler, auth_url: str):
 
     if not code:
         print("ERROR: No code provided")
-        return None
+        return None, None
 
     # Clean up the code if they pasted more than just the code
+    state = None
     if "code=" in code:
         # They pasted the full URL or query string
         parsed = parse_qs(code.split("?")[-1] if "?" in code else code)
         if "code" in parsed:
             code = parsed["code"][0]
+        if "state" in parsed:
+            state = parsed["state"][0]
 
-    return code
+    if state is None:
+        print("ERROR: Please paste the full callback URL so the OAuth state can be verified")
+        return None, None
+
+    return code, state
 
 
 async def main():
@@ -209,13 +216,13 @@ async def main():
     )
 
     # Generate authorization URL
-    auth_url, state = handler.get_authorization_url()
+    auth_url, _state = handler.get_authorization_url()
 
     # Get authorization code
     if args.manual:
-        code = await run_manual_mode(handler, auth_url)
+        code, returned_state = await run_manual_mode(handler, auth_url)
     else:
-        code = await run_auto_mode(handler, auth_url)
+        code, returned_state = await run_auto_mode(handler, auth_url)
 
     if not code:
         print("ERROR: No authorization code received")
@@ -225,7 +232,7 @@ async def main():
 
     # Exchange code for token
     try:
-        token = await handler.exchange_code(code=code, state=None)
+        token = await handler.exchange_code(code=code, state=returned_state)
     except Exception as e:
         print(f"\nERROR: Token exchange failed: {e}")
         return
@@ -237,7 +244,7 @@ async def main():
     print("=" * 60)
 
     print("\nAdd this to your .env file:")
-    print(f"\n  TICKTICK_ACCESS_TOKEN={token.access_token}\n")
+    print("\n  TICKTICK_ACCESS_TOKEN=<paste the access token shown above>\n")
 
     if token.expires_in:
         hours = token.expires_in / 3600
@@ -246,7 +253,7 @@ async def main():
         print("Note: Token expiration not specified (may be long-lived)")
 
     if token.refresh_token:
-        print(f"\nRefresh token (save this for later):\n  {token.refresh_token}")
+        print("\nRefresh token was returned. Store it securely if you plan to implement token refresh.")
 
     print()
 

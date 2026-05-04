@@ -139,8 +139,8 @@ class CreateTasksInput(BaseMCPInput):
         max_length=50,
     )
     response_format: ResponseFormat = Field(
-        default=ResponseFormat.MARKDOWN,
-        description="Output format: 'markdown' for human-readable, 'json' for machine-readable",
+        default=ResponseFormat.JSON,
+        description="Output format: 'json' for machine-readable (default), 'markdown' for human-readable",
     )
 
 
@@ -225,7 +225,7 @@ class UpdateTasksInput(BaseMCPInput):
         max_length=100,
     )
     response_format: ResponseFormat = Field(
-        default=ResponseFormat.MARKDOWN,
+        default=ResponseFormat.JSON,
         description="Output format",
     )
 
@@ -257,7 +257,7 @@ class CompleteTasksInput(BaseMCPInput):
         max_length=100,
     )
     response_format: ResponseFormat = Field(
-        default=ResponseFormat.MARKDOWN,
+        default=ResponseFormat.JSON,
         description="Output format",
     )
 
@@ -272,7 +272,7 @@ class DeleteTasksInput(BaseMCPInput):
         max_length=100,
     )
     response_format: ResponseFormat = Field(
-        default=ResponseFormat.MARKDOWN,
+        default=ResponseFormat.JSON,
         description="Output format",
     )
 
@@ -309,7 +309,7 @@ class MoveTasksInput(BaseMCPInput):
         max_length=100,
     )
     response_format: ResponseFormat = Field(
-        default=ResponseFormat.MARKDOWN,
+        default=ResponseFormat.JSON,
         description="Output format",
     )
 
@@ -346,7 +346,7 @@ class SetTaskParentsInput(BaseMCPInput):
         max_length=50,
     )
     response_format: ResponseFormat = Field(
-        default=ResponseFormat.MARKDOWN,
+        default=ResponseFormat.JSON,
         description="Output format",
     )
 
@@ -378,7 +378,7 @@ class UnparentTasksInput(BaseMCPInput):
         max_length=50,
     )
     response_format: ResponseFormat = Field(
-        default=ResponseFormat.MARKDOWN,
+        default=ResponseFormat.JSON,
         description="Output format",
     )
 
@@ -414,7 +414,7 @@ class PinTasksInput(BaseMCPInput):
         max_length=50,
     )
     response_format: ResponseFormat = Field(
-        default=ResponseFormat.MARKDOWN,
+        default=ResponseFormat.JSON,
         description="Output format",
     )
 
@@ -433,7 +433,7 @@ class TaskGetInput(BaseMCPInput):
         pattern=r"^(inbox\d+|[a-f0-9]{24})$",
     )
     response_format: ResponseFormat = Field(
-        default=ResponseFormat.MARKDOWN,
+        default=ResponseFormat.JSON,
         description="Output format",
     )
 
@@ -517,7 +517,7 @@ class TaskListInput(BaseMCPInput):
         le=500,
     )
     response_format: ResponseFormat = Field(
-        default=ResponseFormat.MARKDOWN,
+        default=ResponseFormat.JSON,
         description="Output format",
     )
 
@@ -538,7 +538,7 @@ class SearchInput(BaseMCPInput):
         le=100,
     )
     response_format: ResponseFormat = Field(
-        default=ResponseFormat.MARKDOWN,
+        default=ResponseFormat.JSON,
         description="Output format",
     )
 
@@ -585,7 +585,7 @@ class ProjectCreateInput(BaseMCPInput):
         pattern=r"^[a-f0-9]{24}$",
     )
     response_format: ResponseFormat = Field(
-        default=ResponseFormat.MARKDOWN,
+        default=ResponseFormat.JSON,
         description="Output format",
     )
 
@@ -603,7 +603,7 @@ class ProjectGetInput(BaseMCPInput):
         description="Whether to include tasks in the response",
     )
     response_format: ResponseFormat = Field(
-        default=ResponseFormat.MARKDOWN,
+        default=ResponseFormat.JSON,
         description="Output format",
     )
 
@@ -642,7 +642,7 @@ class ProjectUpdateInput(BaseMCPInput):
         description="New folder ID (use 'NONE' to remove from folder)",
     )
     response_format: ResponseFormat = Field(
-        default=ResponseFormat.MARKDOWN,
+        default=ResponseFormat.JSON,
         description="Output format",
     )
 
@@ -662,7 +662,7 @@ class FolderCreateInput(BaseMCPInput):
         max_length=100,
     )
     response_format: ResponseFormat = Field(
-        default=ResponseFormat.MARKDOWN,
+        default=ResponseFormat.JSON,
         description="Output format",
     )
 
@@ -692,7 +692,7 @@ class FolderRenameInput(BaseMCPInput):
         max_length=100,
     )
     response_format: ResponseFormat = Field(
-        default=ResponseFormat.MARKDOWN,
+        default=ResponseFormat.JSON,
         description="Output format",
     )
 
@@ -711,7 +711,7 @@ class ColumnListInput(BaseMCPInput):
         pattern=r"^(inbox\d+|[a-f0-9]{24})$",
     )
     response_format: ResponseFormat = Field(
-        default=ResponseFormat.MARKDOWN,
+        default=ResponseFormat.JSON,
         description="Output format",
     )
 
@@ -735,7 +735,7 @@ class ColumnCreateInput(BaseMCPInput):
         description="Display order (lower numbers appear first)",
     )
     response_format: ResponseFormat = Field(
-        default=ResponseFormat.MARKDOWN,
+        default=ResponseFormat.JSON,
         description="Output format",
     )
 
@@ -764,7 +764,7 @@ class ColumnUpdateInput(BaseMCPInput):
         description="New display order",
     )
     response_format: ResponseFormat = Field(
-        default=ResponseFormat.MARKDOWN,
+        default=ResponseFormat.JSON,
         description="Output format",
     )
 
@@ -808,7 +808,7 @@ class TagCreateInput(BaseMCPInput):
         description="Parent tag name for nesting",
     )
     response_format: ResponseFormat = Field(
-        default=ResponseFormat.MARKDOWN,
+        default=ResponseFormat.JSON,
         description="Output format",
     )
 
@@ -872,7 +872,7 @@ class TagUpdateInput(BaseMCPInput):
         max_length=50,
     )
     response_format: ResponseFormat = Field(
-        default=ResponseFormat.MARKDOWN,
+        default=ResponseFormat.JSON,
         description="Output format",
     )
 
@@ -902,7 +902,7 @@ class FocusStatsInput(BaseMCPInput):
         le=365,
     )
     response_format: ResponseFormat = Field(
-        default=ResponseFormat.MARKDOWN,
+        default=ResponseFormat.JSON,
         description="Output format",
     )
 
@@ -920,7 +920,7 @@ class HabitListInput(BaseMCPInput):
         description="Include archived habits in the list",
     )
     response_format: ResponseFormat = Field(
-        default=ResponseFormat.MARKDOWN,
+        default=ResponseFormat.JSON,
         description="Output format",
     )
 
@@ -934,7 +934,7 @@ class HabitGetInput(BaseMCPInput):
         pattern=r"^[a-f0-9]{24}$",
     )
     response_format: ResponseFormat = Field(
-        default=ResponseFormat.MARKDOWN,
+        default=ResponseFormat.JSON,
         description="Output format",
     )
 
@@ -1001,7 +1001,7 @@ class HabitCreateInput(BaseMCPInput):
         max_length=200,
     )
     response_format: ResponseFormat = Field(
-        default=ResponseFormat.MARKDOWN,
+        default=ResponseFormat.JSON,
         description="Output format",
     )
 
@@ -1090,7 +1090,7 @@ class HabitUpdateInput(BaseMCPInput):
         description="Set to true to archive the habit, false to unarchive it",
     )
     response_format: ResponseFormat = Field(
-        default=ResponseFormat.MARKDOWN,
+        default=ResponseFormat.JSON,
         description="Output format",
     )
 
@@ -1142,7 +1142,7 @@ class CheckinHabitsInput(BaseMCPInput):
         max_length=100,
     )
     response_format: ResponseFormat = Field(
-        default=ResponseFormat.MARKDOWN,
+        default=ResponseFormat.JSON,
         description="Output format",
     )
 

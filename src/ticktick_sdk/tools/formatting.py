@@ -18,6 +18,21 @@ from ticktick_sdk.tools.inputs import ResponseFormat
 CHARACTER_LIMIT = 25000
 
 
+def format_untrusted_inline(value: str | None) -> str:
+    """Render untrusted content as a code span to reduce prompt-injection risk."""
+    if not value:
+        return "`(empty)`"
+    normalized = " ".join(value.splitlines()).replace("`", "'")
+    return f"`{normalized}`"
+
+
+def format_untrusted_block(value: str) -> str:
+    """Render untrusted multiline content inside a fenced code block."""
+    fence = "````"
+    sanitized = value.replace(fence, "'''")
+    return f"{fence}\n{sanitized}\n{fence}"
+
+
 def format_datetime(dt: datetime | None) -> str:
     """Format a datetime for human-readable display."""
     if dt is None:
@@ -59,13 +74,11 @@ def format_task_markdown(task: Task) -> str:
     """Format a single task as Markdown."""
     lines = []
 
-    # Title with priority indicator
-    priority_indicator = priority_emoji(task.priority)
-    title = task.title or "(No title)"
-    lines.append(f"## {priority_indicator} {title}")
+    lines.append("## Task")
     lines.append("")
 
     # Key details
+    lines.append(f"- **Title**: {format_untrusted_inline(task.title or '(No title)')}")
     lines.append(f"- **ID**: `{task.id}`")
     lines.append(f"- **Project**: `{task.project_id}`")
     lines.append(f"- **Status**: {status_label(task.status)}")
@@ -81,20 +94,20 @@ def format_task_markdown(task: Task) -> str:
         lines.append(f"- **Start**: {format_datetime(task.start_date)}")
 
     if task.tags:
-        tags_str = ", ".join(f"`{t}`" for t in task.tags)
+        tags_str = ", ".join(format_untrusted_inline(t) for t in task.tags)
         lines.append(f"- **Tags**: {tags_str}")
 
     if task.content:
         lines.append("")
-        lines.append("### Notes")
-        lines.append(task.content)
+        lines.append("### Notes (Untrusted Content)")
+        lines.append(format_untrusted_block(task.content))
 
     if task.items:
         lines.append("")
         lines.append("### Subtasks")
         for item in task.items:
             checkbox = "[x]" if item.is_completed else "[ ]"
-            lines.append(f"- {checkbox} {item.title or '(No title)'}")
+            lines.append(f"- {checkbox} {format_untrusted_inline(item.title or '(No title)')}")
 
     return "\n".join(lines)
 
@@ -143,9 +156,9 @@ def format_tasks_markdown(tasks: list[Task], title: str = "Tasks") -> str:
         priority_indicator = priority_emoji(task.priority)
         task_title = task.title or "(No title)"
         due_str = f" | Due: {format_date(task.due_date)}" if task.due_date else ""
-        tags_str = f" | Tags: {', '.join(task.tags)}" if task.tags else ""
+        tags_str = f" | Tags: {', '.join(format_untrusted_inline(tag) for tag in task.tags)}" if task.tags else ""
 
-        lines.append(f"- {priority_indicator} **{task_title}** (`{task.id}`){due_str}{tags_str}")
+        lines.append(f"- {priority_indicator} {format_untrusted_inline(task_title)} (`{task.id}`){due_str}{tags_str}")
 
     return "\n".join(lines)
 
@@ -167,8 +180,9 @@ def format_project_markdown(project: Project) -> str:
     """Format a single project as Markdown."""
     lines = []
 
-    lines.append(f"## {project.name}")
+    lines.append("## Project")
     lines.append("")
+    lines.append(f"- **Name**: {format_untrusted_inline(project.name)}")
     lines.append(f"- **ID**: `{project.id}`")
     lines.append(f"- **Kind**: {project.kind or 'TASK'}")
     lines.append(f"- **View Mode**: {project.view_mode or 'list'}")
@@ -206,7 +220,7 @@ def format_projects_markdown(projects: list[Project], title: str = "Projects") -
 
     for project in projects:
         color_indicator = f"({project.color})" if project.color else ""
-        lines.append(f"- **{project.name}** (`{project.id}`) {color_indicator}")
+        lines.append(f"- {format_untrusted_inline(project.name)} (`{project.id}`) {color_indicator}")
 
     return "\n".join(lines)
 
@@ -228,9 +242,10 @@ def format_tag_markdown(tag: Tag) -> str:
     """Format a single tag as Markdown."""
     lines = []
 
-    lines.append(f"## {tag.label}")
+    lines.append("## Tag")
     lines.append("")
-    lines.append(f"- **Name**: `{tag.name}`")
+    lines.append(f"- **Label**: {format_untrusted_inline(tag.label)}")
+    lines.append(f"- **Name**: {format_untrusted_inline(tag.name)}")
 
     if tag.color:
         lines.append(f"- **Color**: {tag.color}")
@@ -260,8 +275,8 @@ def format_tags_markdown(tags: list[Tag], title: str = "Tags") -> str:
 
     for tag in tags:
         color_indicator = f"({tag.color})" if tag.color else ""
-        parent_indicator = f" (in {tag.parent})" if tag.parent else ""
-        lines.append(f"- **{tag.label}** (`{tag.name}`) {color_indicator}{parent_indicator}")
+        parent_indicator = f" (in {format_untrusted_inline(tag.parent)})" if tag.parent else ""
+        lines.append(f"- {format_untrusted_inline(tag.label)} ({format_untrusted_inline(tag.name)}) {color_indicator}{parent_indicator}")
 
     return "\n".join(lines)
 
@@ -281,7 +296,7 @@ def format_tags_json(tags: list[Tag]) -> dict[str, Any]:
 
 def format_folder_markdown(folder: ProjectGroup) -> str:
     """Format a single folder as Markdown."""
-    return f"- **{folder.name}** (`{folder.id}`)"
+    return f"- {format_untrusted_inline(folder.name)} (`{folder.id}`)"
 
 
 def format_folder_json(folder: ProjectGroup) -> dict[str, Any]:
@@ -321,7 +336,7 @@ def format_folders_json(folders: list[ProjectGroup]) -> dict[str, Any]:
 
 def format_column_markdown(column: Column) -> str:
     """Format a single column as Markdown."""
-    return f"- **{column.name}** (`{column.id}`) - Sort: {column.sort_order or 0}"
+    return f"- {format_untrusted_inline(column.name)} (`{column.id}`) - Sort: {column.sort_order or 0}"
 
 
 def format_column_json(column: Column) -> dict[str, Any]:
@@ -369,15 +384,15 @@ def format_user_markdown(user: User) -> str:
     """Format user profile as Markdown."""
     lines = ["# User Profile", ""]
 
-    lines.append(f"- **Username**: {user.username}")
+    lines.append(f"- **Username**: {format_untrusted_inline(user.username)}")
     if user.display_name:
-        lines.append(f"- **Display Name**: {user.display_name}")
+        lines.append(f"- **Display Name**: {format_untrusted_inline(user.display_name)}")
     if user.name:
-        lines.append(f"- **Name**: {user.name}")
+        lines.append(f"- **Name**: {format_untrusted_inline(user.name)}")
     if user.email:
-        lines.append(f"- **Email**: {user.email}")
+        lines.append(f"- **Email**: {format_untrusted_inline(user.email)}")
     if user.locale:
-        lines.append(f"- **Locale**: {user.locale}")
+        lines.append(f"- **Locale**: {format_untrusted_inline(user.locale)}")
     lines.append(f"- **Verified Email**: {'Yes' if user.verified_email else 'No'}")
 
     return "\n".join(lines)
@@ -387,7 +402,7 @@ def format_user_status_markdown(status: UserStatus) -> str:
     """Format user status as Markdown."""
     lines = ["# Account Status", ""]
 
-    lines.append(f"- **Username**: {status.username}")
+    lines.append(f"- **Username**: {format_untrusted_inline(status.username)}")
     lines.append(f"- **User ID**: {status.user_id}")
     lines.append(f"- **Inbox ID**: {status.inbox_id}")
     lines.append(f"- **Pro Account**: {'Yes' if status.is_pro else 'No'}")
@@ -498,7 +513,7 @@ def format_batch_create_tasks_markdown(tasks: list[Task]) -> str:
         priority_indicator = priority_emoji(task.priority)
         task_title = task.title or "(No title)"
         due_str = f" | Due: {format_date(task.due_date)}" if task.due_date else ""
-        lines.append(f"- {priority_indicator} **{task_title}** (`{task.id}`){due_str}")
+        lines.append(f"- {priority_indicator} {format_untrusted_inline(task_title)} (`{task.id}`){due_str}")
 
     return "\n".join(lines)
 

@@ -23,6 +23,45 @@ from __future__ import annotations
 from typing import Any
 
 
+_REDACTED_DETAIL_KEYS = (
+    "access_token",
+    "authorization",
+    "client_secret",
+    "cookie",
+    "password",
+    "refresh_token",
+    "response",
+    "response_body",
+    "secret",
+    "session",
+    "token",
+)
+
+
+def _should_redact_key(key: str) -> bool:
+    """Check whether a detail key likely contains sensitive data."""
+    key_lower = key.lower()
+    return any(sensitive_key in key_lower for sensitive_key in _REDACTED_DETAIL_KEYS)
+
+
+def _redact_detail_value(key: str, value: Any) -> Any:
+    """Recursively redact sensitive exception detail values."""
+    if _should_redact_key(key):
+        if isinstance(value, str):
+            return f"<redacted {len(value)} chars>"
+        if isinstance(value, (dict, list, tuple, set)):
+            return "<redacted structured data>"
+        return "<redacted>"
+
+    if isinstance(value, dict):
+        return {nested_key: _redact_detail_value(nested_key, nested_value) for nested_key, nested_value in value.items()}
+    if isinstance(value, list):
+        return [_redact_detail_value(key, item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_redact_detail_value(key, item) for item in value)
+    return value
+
+
 class TickTickError(Exception):
     """Base exception for all TickTick SDK errors."""
 
@@ -33,11 +72,16 @@ class TickTickError(Exception):
 
     def __str__(self) -> str:
         if self.details:
-            return f"{self.message} | Details: {self.details}"
+            return f"{self.message} | Details: {self.safe_details}"
         return self.message
 
     def __repr__(self) -> str:
-        return f"{self.__class__.__name__}(message={self.message!r}, details={self.details!r})"
+        return f"{self.__class__.__name__}(message={self.message!r}, details={self.safe_details!r})"
+
+    @property
+    def safe_details(self) -> dict[str, Any]:
+        """Get a logging-safe view of the exception details."""
+        return {key: _redact_detail_value(key, value) for key, value in self.details.items()}
 
 
 # =============================================================================
