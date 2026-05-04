@@ -165,7 +165,7 @@ class OAuthCallbackHandler(BaseHTTPRequestHandler):
     def _send_error_response(self, error: str | None = None) -> None:
         """Send error HTML response."""
         error_msg = html.escape(error or OAuthCallbackHandler.error or "Unknown error")
-        html = f"""
+        html_body = f"""
         <!DOCTYPE html>
         <html>
         <head>
@@ -207,7 +207,7 @@ class OAuthCallbackHandler(BaseHTTPRequestHandler):
         self.send_response(400)
         self.send_header("Content-Type", "text/html; charset=utf-8")
         self.end_headers()
-        self.wfile.write(html.encode())
+        self.wfile.write(html_body.encode())
 
     def log_message(self, format: str, *args: object) -> None:
         """Suppress default HTTP server logging."""
