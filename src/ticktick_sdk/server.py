@@ -52,6 +52,12 @@ IMPORTANT: TickTick has several unique API behaviors that tools account for:
 6. INBOX: The inbox is a special project that cannot be deleted. Its ID is
    available via get_status (inbox_id field).
 
+7. DATE SHIFT ON CONTENT UPDATE: When updating only a task's content (or other
+   non-date fields), the TickTick API may silently advance the task's start_date
+   and due_date to today or the next occurrence. Always explicitly include the
+   existing due_date and start_date in any update_tasks call to prevent
+   unintended date changes.
+
 === AUTHENTICATION ===
 
 This server requires BOTH V1 and V2 authentication for full functionality:
@@ -695,6 +701,10 @@ async def ticktick_update_tasks(params: UpdateTasksInput, ctx: Context) -> str:
 
     Updates specified fields of tasks. Supports batch updates (1-100 tasks).
     Each update preserves unspecified fields (only specified fields are changed).
+
+    WARNING: The TickTick API may silently shift start_date/due_date even when
+    only non-date fields (e.g. content) are updated. Always pass the existing
+    due_date and start_date explicitly to prevent unintended date changes.
 
     Args:
         params: Update parameters:
@@ -1979,6 +1989,38 @@ async def ticktick_get_profile(ctx: Context, response_format: ResponseFormat = R
 
     except Exception as e:
         return handle_error(e, "get_profile")
+
+
+@mcp.tool(
+    name="ticktick_sync",
+    annotations={
+        "title": "Force Sync",
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": True,
+    },
+)
+async def ticktick_sync(ctx: Context) -> str:
+    """
+    Force a fresh sync from TickTick, bypassing the local cache.
+
+    The MCP server caches the TickTick sync response for a few seconds to avoid
+    redundant API calls across consecutive tool invocations. Call this tool before
+    any sensitive read (list_tasks, get_project, etc.) when you know that changes
+    may have been made outside this session — for example, from the TickTick mobile
+    app, web interface, or another client — and you want to ensure the next reads
+    reflect the latest state.
+
+    Returns:
+        Confirmation message.
+    """
+    try:
+        client = get_client(ctx)
+        await client.sync()
+        return "Sync complete. Subsequent reads will reflect the latest TickTick state."
+    except Exception as e:
+        return handle_error(e, "sync")
 
 
 @mcp.tool(

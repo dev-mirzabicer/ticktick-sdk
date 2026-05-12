@@ -10,7 +10,9 @@ and converts between unified models and API-specific formats.
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import time
 from datetime import date, datetime, timedelta, timezone
 from types import TracebackType
 from typing import Any, TypeVar
@@ -63,6 +65,9 @@ _BATCH_NOT_FOUND_ERRORS = frozenset({
 _BATCH_QUOTA_ERRORS = frozenset({
     "EXCEED_QUOTA",
 })
+
+# How long (seconds) to reuse a sync() response before re-fetching
+_SYNC_CACHE_TTL = 5.0
 
 
 def _check_batch_response_errors(
@@ -268,6 +273,11 @@ class UnifiedTickTickAPI:
         self._initialized = False
         self._inbox_id: str | None = None
 
+        # Sync cache — reuse the expensive sync() response within _SYNC_CACHE_TTL seconds.
+        # Invalidated explicitly after every write operation.
+        self._sync_cache: dict[str, Any] | None = None
+        self._sync_cache_time: float = 0.0
+
     # =========================================================================
     # Initialization & Lifecycle
     # =========================================================================
@@ -395,7 +405,25 @@ class UnifiedTickTickAPI:
             Complete sync state dictionary
         """
         self._ensure_initialized()
-        return await self._v2_client.sync()  # type: ignore
+        state = await self._v2_client.sync()  # type: ignore
+        self._sync_cache = state
+        self._sync_cache_time = time.monotonic()
+        return state
+
+    async def _cached_sync(self) -> dict[str, Any]:
+        """Return sync state, reusing the cached copy if it is still fresh."""
+        now = time.monotonic()
+        if self._sync_cache is not None and (now - self._sync_cache_time) < _SYNC_CACHE_TTL:
+            return self._sync_cache
+        state = await self._v2_client.sync()  # type: ignore
+        self._sync_cache = state
+        self._sync_cache_time = now
+        return state
+
+    def _invalidate_sync_cache(self) -> None:
+        """Discard the cached sync state so the next read fetches fresh data."""
+        self._sync_cache = None
+        self._sync_cache_time = 0.0
 
     # =========================================================================
     # Task Operations
@@ -409,7 +437,7 @@ class UnifiedTickTickAPI:
             List of all active tasks
         """
         self._ensure_initialized()
-        state = await self._v2_client.sync()  # type: ignore
+        state = await self._cached_sync()
         tasks_data = state.get("syncTaskBean", {}).get("update", [])
         return [Task.from_v2(t) for t in tasks_data]
 
@@ -495,6 +523,7 @@ class UnifiedTickTickAPI:
             TickTickAPIUnavailableError: If V2 API is not available
         """
         self._ensure_initialized()
+        self._invalidate_sync_cache()
 
         # Validate: recurrence requires start_date (TickTick silently ignores it otherwise)
         if repeat_flag and not start_date:
@@ -571,6 +600,7 @@ class UnifiedTickTickAPI:
             TickTickAPIError: On other API errors
         """
         self._ensure_initialized()
+        self._invalidate_sync_cache()
 
         # Use V2 (primary)
         if self._router.has_v2:
@@ -625,6 +655,7 @@ class UnifiedTickTickAPI:
             TickTickNotFoundError: If the task does not exist
         """
         self._ensure_initialized()
+        self._invalidate_sync_cache()
 
         # Use V2 (primary) - better error handling
         if self._router.has_v2:
@@ -669,6 +700,7 @@ class UnifiedTickTickAPI:
             TickTickNotFoundError: If the task does not exist
         """
         self._ensure_initialized()
+        self._invalidate_sync_cache()
 
         # Use V2 (primary)
         if self._router.has_v2:
@@ -778,6 +810,7 @@ class UnifiedTickTickAPI:
             TickTickNotFoundError: If the task does not exist
         """
         self._ensure_initialized()
+        self._invalidate_sync_cache()
         # V2 move silently ignores nonexistent tasks. Verify first.
         await self._v2_client.get_task(task_id)  # type: ignore  # Raises NotFoundError if missing
         await self._v2_client.move_task(task_id, from_project_id, to_project_id)  # type: ignore
@@ -805,6 +838,7 @@ class UnifiedTickTickAPI:
             TickTickNotFoundError: If the task does not exist
         """
         self._ensure_initialized()
+        self._invalidate_sync_cache()
         # V2 set_parent silently ignores nonexistent tasks. Verify first.
         await self._v2_client.get_task(task_id)  # type: ignore  # Raises NotFoundError if missing
         await self._v2_client.set_task_parent(task_id, project_id, parent_id)  # type: ignore
@@ -831,6 +865,7 @@ class UnifiedTickTickAPI:
             TickTickAPIError: If the task is not a subtask
         """
         self._ensure_initialized()
+        self._invalidate_sync_cache()
         # V2 unset_parent silently ignores nonexistent tasks. Verify first.
         task = await self._v2_client.get_task(task_id)  # type: ignore  # Raises NotFoundError if missing
 
@@ -862,6 +897,7 @@ class UnifiedTickTickAPI:
             Updated task with pinned_time set
         """
         self._ensure_initialized()
+        self._invalidate_sync_cache()
         if not self._router.has_v2:  # type: ignore
             raise TickTickAPIUnavailableError(
                 "Task pinning requires V2 API",
@@ -897,6 +933,7 @@ class UnifiedTickTickAPI:
             Updated task with pinned_time cleared
         """
         self._ensure_initialized()
+        self._invalidate_sync_cache()
         if not self._router.has_v2:  # type: ignore
             raise TickTickAPIUnavailableError(
                 "Task unpinning requires V2 API",
@@ -955,6 +992,7 @@ class UnifiedTickTickAPI:
             TickTickAPIError: On other API errors
         """
         self._ensure_initialized()
+        self._invalidate_sync_cache()
 
         if not self._router.has_v2:
             raise TickTickAPIUnavailableError(
@@ -962,74 +1000,94 @@ class UnifiedTickTickAPI:
                 operation="batch_create_tasks",
             )
 
-        results: list[Task] = []
-
-        # Process each task (V2 batch create doesn't support parent_id directly)
-        for task_spec in tasks:
+        # Validate and preprocess all specs before any API calls
+        def _preprocess(task_spec: dict[str, Any]) -> dict[str, Any]:
             title = task_spec.get("title")
             if not title:
                 raise TickTickAPIError(
                     "Each task requires a 'title' field",
                     details={"task_spec": task_spec},
                 )
-
-            project_id = task_spec.get("project_id") or self._inbox_id
-            parent_id = task_spec.get("parent_id")
-
-            # Format dates if provided
             start_date = task_spec.get("start_date")
             due_date = task_spec.get("due_date")
             if start_date and isinstance(start_date, datetime):
                 start_date = Task.format_datetime(start_date, "v2")
             if due_date and isinstance(due_date, datetime):
                 due_date = Task.format_datetime(due_date, "v2")
-
-            # Prepare reminders
             reminders = task_spec.get("reminders")
             if reminders:
                 reminders = [{"trigger": r} for r in reminders]
-
-            # Map priority string to int if needed
             priority = task_spec.get("priority")
             if isinstance(priority, str):
                 priority_map = {"none": 0, "low": 1, "medium": 3, "high": 5}
                 priority = priority_map.get(priority.lower(), priority)
                 if isinstance(priority, str):
                     priority = int(priority)
+            return {
+                "title": title,
+                "project_id": task_spec.get("project_id") or self._inbox_id,
+                "parent_id": task_spec.get("parent_id"),
+                "content": task_spec.get("content"),
+                "description": task_spec.get("description"),
+                "kind": task_spec.get("kind"),
+                "priority": priority,
+                "start_date": start_date,
+                "due_date": due_date,
+                "time_zone": task_spec.get("time_zone"),
+                "all_day": task_spec.get("all_day"),
+                "reminders": reminders,
+                "recurrence": task_spec.get("recurrence"),
+                "tags": task_spec.get("tags"),
+            }
 
-            # Create the task
+        preprocessed = [_preprocess(s) for s in tasks]
+
+        async def _create_one(spec: dict[str, Any]) -> tuple[str, str | None, str | None]:
             response = await self._v2_client.create_task(  # type: ignore
-                title=title,
-                project_id=project_id,
-                content=task_spec.get("content"),
-                desc=task_spec.get("description"),
-                kind=task_spec.get("kind"),
-                priority=priority,
-                start_date=start_date,
-                due_date=due_date,
-                time_zone=task_spec.get("time_zone"),
-                is_all_day=task_spec.get("all_day"),
-                reminders=reminders,
-                repeat_flag=task_spec.get("recurrence"),
-                tags=task_spec.get("tags"),
+                title=spec["title"],
+                project_id=spec["project_id"],
+                content=spec["content"],
+                desc=spec["description"],
+                kind=spec["kind"],
+                priority=spec["priority"],
+                start_date=spec["start_date"],
+                due_date=spec["due_date"],
+                time_zone=spec["time_zone"],
+                is_all_day=spec["all_day"],
+                reminders=spec["reminders"],
+                repeat_flag=spec["recurrence"],
+                tags=spec["tags"],
             )
-
-            # Get the created task ID
             task_id = next(iter(response.get("id2etag", {}).keys()), None)
             if not task_id:
                 raise TickTickAPIError(
                     "batch_create_tasks succeeded but returned no task ID",
-                    details={"response": response, "title": title},
+                    details={"response": response, "title": spec["title"]},
                 )
+            return task_id, spec["project_id"], spec["parent_id"]
 
-            # Set parent if requested
-            if parent_id:
-                await self._v2_client.set_task_parent(task_id, project_id, parent_id)  # type: ignore
+        # Phase 1: create all tasks in parallel
+        created: list[tuple[str, str | None, str | None]] = list(
+            await asyncio.gather(*[_create_one(s) for s in preprocessed])
+        )
 
-            # Fetch the created task
-            results.append(await self.get_task(task_id, project_id))
+        # Phase 2: set parents in parallel for tasks that need it
+        parent_ops = [
+            (task_id, project_id, parent_id)
+            for task_id, project_id, parent_id in created
+            if parent_id
+        ]
+        if parent_ops:
+            await asyncio.gather(*[
+                self._v2_client.set_task_parent(task_id, project_id, parent_id)  # type: ignore
+                for task_id, project_id, parent_id in parent_ops
+            ])
 
-        return results
+        # Phase 3: fetch all created tasks in parallel
+        return list(await asyncio.gather(*[
+            self.get_task(task_id, project_id)
+            for task_id, project_id, _ in created
+        ]))
 
     async def batch_update_tasks(
         self,
@@ -1064,6 +1122,7 @@ class UnifiedTickTickAPI:
             TickTickAPIError: On other API errors
         """
         self._ensure_initialized()
+        self._invalidate_sync_cache()
 
         if not self._router.has_v2:
             raise TickTickAPIUnavailableError(
@@ -1148,6 +1207,7 @@ class UnifiedTickTickAPI:
             TickTickAPIUnavailableError: If V2 API is not available
         """
         self._ensure_initialized()
+        self._invalidate_sync_cache()
 
         if not self._router.has_v2:
             raise TickTickAPIUnavailableError(
@@ -1178,6 +1238,7 @@ class UnifiedTickTickAPI:
             TickTickAPIUnavailableError: If V2 API is not available
         """
         self._ensure_initialized()
+        self._invalidate_sync_cache()
 
         if not self._router.has_v2:
             raise TickTickAPIUnavailableError(
@@ -1218,6 +1279,7 @@ class UnifiedTickTickAPI:
             TickTickAPIUnavailableError: If V2 API is not available
         """
         self._ensure_initialized()
+        self._invalidate_sync_cache()
 
         if not self._router.has_v2:
             raise TickTickAPIUnavailableError(
@@ -1255,6 +1317,7 @@ class UnifiedTickTickAPI:
             TickTickAPIUnavailableError: If V2 API is not available
         """
         self._ensure_initialized()
+        self._invalidate_sync_cache()
 
         if not self._router.has_v2:
             raise TickTickAPIUnavailableError(
@@ -1262,14 +1325,14 @@ class UnifiedTickTickAPI:
                 operation="batch_set_task_parents",
             )
 
-        results: list[dict[str, Any]] = []
-        for assignment in assignments:
-            response = await self._v2_client.set_task_parent(  # type: ignore
-                task_id=assignment["task_id"],
-                project_id=assignment["project_id"],
-                parent_id=assignment["parent_id"],
+        results: list[dict[str, Any]] = list(await asyncio.gather(*[
+            self._v2_client.set_task_parent(  # type: ignore
+                task_id=a["task_id"],
+                project_id=a["project_id"],
+                parent_id=a["parent_id"],
             )
-            results.append(response)
+            for a in assignments
+        ]))
 
         return results
 
@@ -1295,6 +1358,7 @@ class UnifiedTickTickAPI:
             TickTickAPIError: If a task is not a subtask
         """
         self._ensure_initialized()
+        self._invalidate_sync_cache()
 
         if not self._router.has_v2:
             raise TickTickAPIUnavailableError(
@@ -1302,29 +1366,23 @@ class UnifiedTickTickAPI:
                 operation="batch_unparent_tasks",
             )
 
-        results: list[dict[str, Any]] = []
-        for task_spec in tasks:
+        async def _fetch_and_unparent(task_spec: dict[str, str]) -> dict[str, Any]:
             task_id = task_spec["task_id"]
             project_id = task_spec["project_id"]
-
-            # Get task to find parent_id
             task = await self._v2_client.get_task(task_id)  # type: ignore
             parent_id = task.get("parentId")
-
             if not parent_id:
                 raise TickTickAPIError(
                     f"Task {task_id} is not a subtask (has no parent)",
                     details={"task_id": task_id},
                 )
-
-            response = await self._v2_client.unset_task_parent(  # type: ignore
+            return await self._v2_client.unset_task_parent(  # type: ignore
                 task_id=task_id,
                 project_id=project_id,
                 old_parent_id=parent_id,
             )
-            results.append(response)
 
-        return results
+        return list(await asyncio.gather(*[_fetch_and_unparent(t) for t in tasks]))
 
     async def batch_pin_tasks(
         self,
@@ -1348,6 +1406,7 @@ class UnifiedTickTickAPI:
             TickTickAPIUnavailableError: If V2 API is not available
         """
         self._ensure_initialized()
+        self._invalidate_sync_cache()
 
         if not self._router.has_v2:
             raise TickTickAPIUnavailableError(
@@ -1355,17 +1414,12 @@ class UnifiedTickTickAPI:
                 operation="batch_pin_tasks",
             )
 
-        results: list[Task] = []
-        for op in pin_operations:
-            task_id = op["task_id"]
-            project_id = op["project_id"]
-            pin = op.get("pin", True)
+        async def _pin_one(op: dict[str, Any]) -> Task:
+            if op.get("pin", True):
+                return await self.pin_task(op["task_id"], op["project_id"])
+            return await self.unpin_task(op["task_id"], op["project_id"])
 
-            if pin:
-                task = await self.pin_task(task_id, project_id)
-            else:
-                task = await self.unpin_task(task_id, project_id)
-            results.append(task)
+        results: list[Task] = list(await asyncio.gather(*[_pin_one(op) for op in pin_operations]))
 
         return results
 
@@ -1412,6 +1466,7 @@ class UnifiedTickTickAPI:
             Created column
         """
         self._ensure_initialized()
+        self._invalidate_sync_cache()
         if not self._router.has_v2:  # type: ignore
             raise TickTickAPIUnavailableError(
                 "Column operations require V2 API",
@@ -1469,6 +1524,7 @@ class UnifiedTickTickAPI:
             Updated column
         """
         self._ensure_initialized()
+        self._invalidate_sync_cache()
         if not self._router.has_v2:  # type: ignore
             raise TickTickAPIUnavailableError(
                 "Column operations require V2 API",
@@ -1504,6 +1560,7 @@ class UnifiedTickTickAPI:
             project_id: Project ID (for validation)
         """
         self._ensure_initialized()
+        self._invalidate_sync_cache()
         if not self._router.has_v2:  # type: ignore
             raise TickTickAPIUnavailableError(
                 "Column operations require V2 API",
@@ -1530,6 +1587,7 @@ class UnifiedTickTickAPI:
             Updated task
         """
         self._ensure_initialized()
+        self._invalidate_sync_cache()
         if not self._router.has_v2:  # type: ignore
             raise TickTickAPIUnavailableError(
                 "Column operations require V2 API",
@@ -1564,7 +1622,7 @@ class UnifiedTickTickAPI:
 
         # Use V2 (primary) for more metadata
         if self._router.has_v2:
-            state = await self._v2_client.sync()  # type: ignore
+            state = await self._cached_sync()
             projects_data = state.get("projectProfiles", [])
             return [Project.from_v2(p) for p in projects_data]
 
@@ -1595,7 +1653,7 @@ class UnifiedTickTickAPI:
 
         # Use V2 (primary) - requires sync to get project list
         if self._router.has_v2:
-            state = await self._v2_client.sync()  # type: ignore
+            state = await self._cached_sync()
             for p in state.get("projectProfiles", []):
                 if p.get("id") == project_id:
                     return Project.from_v2(p)
@@ -1637,7 +1695,7 @@ class UnifiedTickTickAPI:
         if self._router.has_v2:
             try:
                 # Get all data from sync
-                state = await self._v2_client.sync()  # type: ignore
+                state = await self._cached_sync()
 
                 # Find the project
                 project_data = None
@@ -1718,6 +1776,7 @@ class UnifiedTickTickAPI:
             TickTickAPIUnavailableError: If V2 API is not available
         """
         self._ensure_initialized()
+        self._invalidate_sync_cache()
 
         # V2 is REQUIRED
         if not self._router.has_v2:
@@ -1768,6 +1827,7 @@ class UnifiedTickTickAPI:
             TickTickNotFoundError: If the project does not exist
         """
         self._ensure_initialized()
+        self._invalidate_sync_cache()
 
         # Verify project exists first
         existing = await self.get_project(project_id)
@@ -1798,6 +1858,7 @@ class UnifiedTickTickAPI:
             TickTickNotFoundError: If the project does not exist
         """
         self._ensure_initialized()
+        self._invalidate_sync_cache()
 
         # Use V2 (primary)
         if self._router.has_v2:
@@ -1830,7 +1891,7 @@ class UnifiedTickTickAPI:
             List of project groups
         """
         self._ensure_initialized()
-        state = await self._v2_client.sync()  # type: ignore
+        state = await self._cached_sync()
         groups_data = state.get("projectGroups") or []  # Handle None values
         return [ProjectGroup.from_v2(g) for g in groups_data]
 
@@ -1847,6 +1908,7 @@ class UnifiedTickTickAPI:
             Created group
         """
         self._ensure_initialized()
+        self._invalidate_sync_cache()
         response = await self._v2_client.create_project_group(name)  # type: ignore
         group_id = next(iter(response.get("id2etag", {}).keys()), None)
 
@@ -1880,6 +1942,7 @@ class UnifiedTickTickAPI:
             TickTickNotFoundError: If the group does not exist
         """
         self._ensure_initialized()
+        self._invalidate_sync_cache()
 
         # Verify group exists first
         groups = await self.list_project_groups()
@@ -1917,6 +1980,7 @@ class UnifiedTickTickAPI:
             TickTickNotFoundError: If the group does not exist
         """
         self._ensure_initialized()
+        self._invalidate_sync_cache()
 
         # V2 delete silently ignores nonexistent groups. Verify first.
         groups = await self.list_project_groups()
@@ -1942,7 +2006,7 @@ class UnifiedTickTickAPI:
             List of tags
         """
         self._ensure_initialized()
-        state = await self._v2_client.sync()  # type: ignore
+        state = await self._cached_sync()
         tags_data = state.get("tags", [])
         return [Tag.from_v2(t) for t in tags_data]
 
@@ -1967,6 +2031,7 @@ class UnifiedTickTickAPI:
             Created tag
         """
         self._ensure_initialized()
+        self._invalidate_sync_cache()
         await self._v2_client.create_tag(  # type: ignore
             label=label,
             color=color,
@@ -1998,6 +2063,7 @@ class UnifiedTickTickAPI:
             TickTickNotFoundError: If the tag does not exist
         """
         self._ensure_initialized()
+        self._invalidate_sync_cache()
 
         # Verify tag exists first
         tags = await self.list_tags()
@@ -2046,6 +2112,7 @@ class UnifiedTickTickAPI:
             TickTickNotFoundError: If the tag does not exist
         """
         self._ensure_initialized()
+        self._invalidate_sync_cache()
 
         # V2 delete silently ignores nonexistent tags. Verify first.
         tags = await self.list_tags()
@@ -2068,6 +2135,7 @@ class UnifiedTickTickAPI:
             new_label: New tag label
         """
         self._ensure_initialized()
+        self._invalidate_sync_cache()
         await self._v2_client.rename_tag(old_name, new_label)  # type: ignore
 
     async def merge_tags(self, source_name: str, target_name: str) -> None:
@@ -2081,6 +2149,7 @@ class UnifiedTickTickAPI:
             target_name: Tag to merge into
         """
         self._ensure_initialized()
+        self._invalidate_sync_cache()
         await self._v2_client.merge_tags(source_name, target_name)  # type: ignore
 
     # =========================================================================
