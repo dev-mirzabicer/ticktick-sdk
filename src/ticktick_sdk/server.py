@@ -52,6 +52,12 @@ IMPORTANT: TickTick has several unique API behaviors that tools account for:
 6. INBOX: The inbox is a special project that cannot be deleted. Its ID is
    available via get_status (inbox_id field).
 
+7. DATE SHIFT ON CONTENT UPDATE: When updating only a task's content (or other
+   non-date fields), the TickTick API may silently advance the task's start_date
+   and due_date to today or the next occurrence. Always explicitly include the
+   existing due_date and start_date in any update_tasks call to prevent
+   unintended date changes.
+
 === AUTHENTICATION ===
 
 This server requires BOTH V1 and V2 authentication for full functionality:
@@ -74,11 +80,11 @@ Optional:
 
 All tools support two response formats via the `response_format` parameter:
 
-- "markdown" (default): Human-readable formatted text with headers, lists, and
-  timestamps in readable format. Best for displaying results to users.
-
-- "json": Machine-readable structured data with all available fields.
+- "json" (default): Machine-readable structured data with all available fields.
   Best for programmatic processing or when specific field values are needed.
+
+- "markdown": Human-readable formatted text with headers, lists, and
+  timestamps in readable format. Best for displaying results to users.
 
 === ERROR HANDLING ===
 
@@ -101,6 +107,7 @@ from typing import Any, AsyncIterator
 from mcp.server.fastmcp import FastMCP, Context
 
 from ticktick_sdk.client import TickTickClient
+from ticktick_sdk.exceptions import TickTickError
 from ticktick_sdk.settings import get_settings
 from ticktick_sdk.tools.inputs import (
     ResponseFormat,
@@ -295,10 +302,10 @@ def handle_error(e: Exception, operation: str) -> str:
     2. Why it might have happened
     3. Specific steps to resolve the issue
     """
-    logger.exception("Error in %s: %s", operation, e)
+    logger.exception("Error in %s [%s]: %s", operation, type(e).__name__, e)
 
     error_type = type(e).__name__
-    error_str = str(e)
+    error_str = e.message if isinstance(e, TickTickError) else str(e)
 
     if "Authentication" in error_type:
         return error_message(
@@ -443,7 +450,7 @@ async def ticktick_create_tasks(params: CreateTasksInput, ctx: Context) -> str:
                 - reminders (list[str]): Reminder triggers in iCal format (e.g., 'TRIGGER:-PT30M')
                 - recurrence (str): RRULE format (e.g., 'RRULE:FREQ=DAILY')
                 - parent_id (str): Parent task ID to make this a subtask
-            - response_format (str): 'markdown' (default) or 'json'
+            - response_format (str): 'json' (default) or 'markdown'
 
     Returns:
         On success: Summary of created tasks with details
@@ -544,7 +551,7 @@ async def ticktick_get_task(params: TaskGetInput, ctx: Context) -> str:
         params: Query parameters:
             - task_id (str, required): Task identifier
             - project_id (str): Project ID (optional, used for V1 fallback)
-            - response_format (str): 'markdown' (default) or 'json'
+            - response_format (str): 'json' (default) or 'markdown'
 
     Returns:
         Task details including: id, project_id, title, content, kind, status,
@@ -695,6 +702,10 @@ async def ticktick_update_tasks(params: UpdateTasksInput, ctx: Context) -> str:
     Updates specified fields of tasks. Supports batch updates (1-100 tasks).
     Each update preserves unspecified fields (only specified fields are changed).
 
+    WARNING: The TickTick API may silently shift start_date/due_date even when
+    only non-date fields (e.g. content) are updated. Always pass the existing
+    due_date and start_date explicitly to prevent unintended date changes.
+
     Args:
         params: Update parameters:
             - tasks (list, required): List of update specifications (1-100 tasks)
@@ -714,7 +725,7 @@ async def ticktick_update_tasks(params: UpdateTasksInput, ctx: Context) -> str:
                 - recurrence (str): RRULE format for recurring tasks
                 - column_id (str): Kanban column ID for board assignment
                   (use empty string '' to remove from column)
-            - response_format (str): 'markdown' (default) or 'json'
+            - response_format (str): 'json' (default) or 'markdown'
 
     Returns:
         Summary of updated tasks or error message.
@@ -816,7 +827,7 @@ async def ticktick_complete_tasks(params: CompleteTasksInput, ctx: Context) -> s
               Each task must contain:
                 - task_id (str): Task to complete
                 - project_id (str): Project containing the task
-            - response_format (str): 'markdown' (default) or 'json'
+            - response_format (str): 'json' (default) or 'markdown'
 
     Returns:
         Success confirmation or error message.
@@ -869,7 +880,7 @@ async def ticktick_delete_tasks(params: DeleteTasksInput, ctx: Context) -> str:
               Each task must contain:
                 - task_id (str): Task to delete
                 - project_id (str): Project containing the task
-            - response_format (str): 'markdown' (default) or 'json'
+            - response_format (str): 'json' (default) or 'markdown'
 
     Returns:
         Success confirmation or error message.
@@ -913,7 +924,7 @@ async def ticktick_move_tasks(params: MoveTasksInput, ctx: Context) -> str:
                 - task_id (str): Task to move
                 - from_project_id (str): Source project
                 - to_project_id (str): Destination project
-            - response_format (str): 'markdown' (default) or 'json'
+            - response_format (str): 'json' (default) or 'markdown'
 
     Returns:
         Success confirmation or error message.
@@ -971,7 +982,7 @@ async def ticktick_set_task_parents(params: SetTaskParentsInput, ctx: Context) -
                 - task_id (str): Task to make a subtask
                 - project_id (str): Project containing both tasks
                 - parent_id (str): Parent task ID
-            - response_format (str): 'markdown' (default) or 'json'
+            - response_format (str): 'json' (default) or 'markdown'
 
     Returns:
         Success confirmation or error message.
@@ -1028,7 +1039,7 @@ async def ticktick_unparent_tasks(params: UnparentTasksInput, ctx: Context) -> s
               Each task must contain:
                 - task_id (str): Subtask to unparent
                 - project_id (str): Project containing the task
-            - response_format (str): 'markdown' (default) or 'json'
+            - response_format (str): 'json' (default) or 'markdown'
 
     Returns:
         Success confirmation or error message.
@@ -1128,7 +1139,7 @@ async def ticktick_pin_tasks(params: PinTasksInput, ctx: Context) -> str:
                 - task_id (str): Task to pin/unpin
                 - project_id (str): Project containing the task
                 - pin (bool): True to pin, False to unpin (default True)
-            - response_format (str): 'markdown' (default) or 'json'
+            - response_format (str): 'json' (default) or 'markdown'
 
     Returns:
         Success confirmation with updated task details.
@@ -1205,7 +1216,7 @@ async def ticktick_list_columns(params: ColumnListInput, ctx: Context) -> str:
     Args:
         params: Query parameters:
             - project_id (str, required): Project ID (must be a kanban project)
-            - response_format (str): 'markdown' (default) or 'json'
+            - response_format (str): 'json' (default) or 'markdown'
 
     Returns:
         List of columns with id, name, and sort_order. Use column_id in
@@ -1353,7 +1364,7 @@ async def ticktick_delete_column(params: ColumnDeleteInput, ctx: Context) -> str
         "openWorldHint": True,
     },
 )
-async def ticktick_list_projects(ctx: Context, response_format: ResponseFormat = ResponseFormat.MARKDOWN) -> str:
+async def ticktick_list_projects(ctx: Context, response_format: ResponseFormat = ResponseFormat.JSON) -> str:
     """
     List all projects.
 
@@ -1396,7 +1407,7 @@ async def ticktick_get_project(params: ProjectGetInput, ctx: Context) -> str:
         params: Query parameters:
             - project_id (str, required): Project identifier
             - include_tasks (bool): Include all project tasks (default False)
-            - response_format (str): 'markdown' (default) or 'json'
+            - response_format (str): 'json' (default) or 'markdown'
 
     Returns:
         Project details: id, name, kind (TASK/NOTE), view_mode (list/kanban/timeline),
@@ -1459,7 +1470,7 @@ async def ticktick_create_project(params: ProjectCreateInput, ctx: Context) -> s
               - 'timeline': Gantt-style timeline view for scheduling
             - color (str): Hex color code (e.g., '#F18181', '#4CAFF6')
             - folder_id (str): Parent folder ID to organize project in a folder
-            - response_format (str): 'markdown' (default) or 'json'
+            - response_format (str): 'json' (default) or 'markdown'
 
     Returns:
         Formatted project details or error message.
@@ -1598,7 +1609,7 @@ async def ticktick_delete_project(params: ProjectDeleteInput, ctx: Context) -> s
         "openWorldHint": True,
     },
 )
-async def ticktick_list_folders(ctx: Context, response_format: ResponseFormat = ResponseFormat.MARKDOWN) -> str:
+async def ticktick_list_folders(ctx: Context, response_format: ResponseFormat = ResponseFormat.JSON) -> str:
     """
     List all folders (project groups).
 
@@ -1737,7 +1748,7 @@ async def ticktick_delete_folder(params: FolderDeleteInput, ctx: Context) -> str
         "openWorldHint": True,
     },
 )
-async def ticktick_list_tags(ctx: Context, response_format: ResponseFormat = ResponseFormat.MARKDOWN) -> str:
+async def ticktick_list_tags(ctx: Context, response_format: ResponseFormat = ResponseFormat.JSON) -> str:
     """
     List all tags.
 
@@ -1950,7 +1961,7 @@ async def ticktick_merge_tags(params: TagMergeInput, ctx: Context) -> str:
         "openWorldHint": True,
     },
 )
-async def ticktick_get_profile(ctx: Context, response_format: ResponseFormat = ResponseFormat.MARKDOWN) -> str:
+async def ticktick_get_profile(ctx: Context, response_format: ResponseFormat = ResponseFormat.JSON) -> str:
     """
     Get user profile information.
 
@@ -1981,6 +1992,38 @@ async def ticktick_get_profile(ctx: Context, response_format: ResponseFormat = R
 
 
 @mcp.tool(
+    name="ticktick_sync",
+    annotations={
+        "title": "Force Sync",
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": True,
+    },
+)
+async def ticktick_sync(ctx: Context) -> str:
+    """
+    Force a fresh sync from TickTick, bypassing the local cache.
+
+    The MCP server caches the TickTick sync response for a few seconds to avoid
+    redundant API calls across consecutive tool invocations. Call this tool before
+    any sensitive read (list_tasks, get_project, etc.) when you know that changes
+    may have been made outside this session — for example, from the TickTick mobile
+    app, web interface, or another client — and you want to ensure the next reads
+    reflect the latest state.
+
+    Returns:
+        Confirmation message.
+    """
+    try:
+        client = get_client(ctx)
+        await client.sync()
+        return "Sync complete. Subsequent reads will reflect the latest TickTick state."
+    except Exception as e:
+        return handle_error(e, "sync")
+
+
+@mcp.tool(
     name="ticktick_get_status",
     annotations={
         "title": "Get Account Status",
@@ -1990,7 +2033,7 @@ async def ticktick_get_profile(ctx: Context, response_format: ResponseFormat = R
         "openWorldHint": True,
     },
 )
-async def ticktick_get_status(ctx: Context, response_format: ResponseFormat = ResponseFormat.MARKDOWN) -> str:
+async def ticktick_get_status(ctx: Context, response_format: ResponseFormat = ResponseFormat.JSON) -> str:
     """
     Get account status and subscription information.
 
@@ -2029,7 +2072,7 @@ async def ticktick_get_status(ctx: Context, response_format: ResponseFormat = Re
         "openWorldHint": True,
     },
 )
-async def ticktick_get_statistics(ctx: Context, response_format: ResponseFormat = ResponseFormat.MARKDOWN) -> str:
+async def ticktick_get_statistics(ctx: Context, response_format: ResponseFormat = ResponseFormat.JSON) -> str:
     """
     Get productivity statistics.
 
@@ -2391,7 +2434,7 @@ async def ticktick_habit(params: HabitGetInput, ctx: Context) -> str:
         "openWorldHint": True,
     },
 )
-async def ticktick_habit_sections(ctx: Context, response_format: ResponseFormat = ResponseFormat.MARKDOWN) -> str:
+async def ticktick_habit_sections(ctx: Context, response_format: ResponseFormat = ResponseFormat.JSON) -> str:
     """
     List habit sections (time-of-day groupings).
 

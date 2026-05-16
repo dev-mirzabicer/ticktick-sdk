@@ -24,6 +24,7 @@ Example:
 from __future__ import annotations
 
 import asyncio
+import html
 import os
 import sys
 import webbrowser
@@ -163,8 +164,8 @@ class OAuthCallbackHandler(BaseHTTPRequestHandler):
 
     def _send_error_response(self, error: str | None = None) -> None:
         """Send error HTML response."""
-        error_msg = error or OAuthCallbackHandler.error or "Unknown error"
-        html = f"""
+        error_msg = html.escape(error or OAuthCallbackHandler.error or "Unknown error")
+        html_body = f"""
         <!DOCTYPE html>
         <html>
         <head>
@@ -206,7 +207,7 @@ class OAuthCallbackHandler(BaseHTTPRequestHandler):
         self.send_response(400)
         self.send_header("Content-Type", "text/html; charset=utf-8")
         self.end_headers()
-        self.wfile.write(html.encode())
+        self.wfile.write(html_body.encode())
 
     def log_message(self, format: str, *args: object) -> None:
         """Suppress default HTTP server logging."""
@@ -250,7 +251,7 @@ def print_success_token(token: str) -> None:
     print(colorize("=" * width, Colors.GREEN))
 
 
-def print_env_instruction(token: str) -> None:
+def print_env_instruction(_token: str) -> None:
     """Print instructions for using the token."""
     print()
     print(colorize("NEXT STEPS:", Colors.BOLD))
@@ -259,7 +260,7 @@ def print_env_instruction(token: str) -> None:
     # Python library users
     print(colorize("For Python Library users:", Colors.BOLD))
     print("  Add to your .env file:")
-    print(colorize(f"    TICKTICK_ACCESS_TOKEN={token}", Colors.CYAN))
+    print(colorize("    TICKTICK_ACCESS_TOKEN=<paste the access token shown above>", Colors.CYAN))
     print()
 
     # Claude Code users
@@ -269,7 +270,7 @@ def print_env_instruction(token: str) -> None:
         f"    claude mcp add ticktick \\\n"
         f"      -e TICKTICK_CLIENT_ID=YOUR_CLIENT_ID \\\n"
         f"      -e TICKTICK_CLIENT_SECRET=YOUR_CLIENT_SECRET \\\n"
-        f"      -e TICKTICK_ACCESS_TOKEN={token} \\\n"
+        f"      -e TICKTICK_ACCESS_TOKEN=YOUR_ACCESS_TOKEN \\\n"
         f"      -e TICKTICK_USERNAME=YOUR_EMAIL \\\n"
         f"      -e TICKTICK_PASSWORD=YOUR_PASSWORD \\\n"
         f"      -- ticktick-sdk",
@@ -303,8 +304,12 @@ def print_token_expiry(expires_in: int | None, refresh_token: str | None) -> Non
 
     if refresh_token:
         print()
-        print("Refresh token (save this for later):")
-        print(colorize(f"  {refresh_token}", Colors.CYAN))
+        print(
+            colorize(
+                "Refresh token was returned. Store it securely if you plan to implement token refresh.",
+                Colors.YELLOW,
+            )
+        )
 
     print()
 
@@ -318,7 +323,7 @@ async def run_auto_mode(
     handler: OAuth2Handler,
     auth_url: str,
     callback_port: int,
-) -> str | None:
+) -> tuple[str | None, str | None]:
     """
     Run OAuth flow with automatic browser and local callback server.
 
@@ -367,15 +372,15 @@ async def run_auto_mode(
                 Colors.RED,
             )
         )
-        return None
+        return None, None
 
-    return OAuthCallbackHandler.authorization_code
+    return OAuthCallbackHandler.authorization_code, OAuthCallbackHandler.state
 
 
 async def run_manual_mode(
     handler: OAuth2Handler,
     auth_url: str,
-) -> str | None:
+) -> tuple[str | None, str | None]:
     """
     Run OAuth flow manually (SSH-friendly).
 
@@ -409,33 +414,40 @@ async def run_manual_mode(
     print("        http://127.0.0.1:8080/callback?code=XXXXX&state=YYYYY")
     print()
     print("        (The page will show an error - that's OK!)")
-    print("        Copy the 'code' value from that URL.")
+    print("        Copy the full callback URL from your browser's address bar.")
     print()
     print(colorize("=" * width, Colors.CYAN))
     print()
 
     try:
-        code = input("Paste the 'code' here: ").strip()
+        code = input("Paste the full callback URL here: ").strip()
     except (KeyboardInterrupt, EOFError):
         print()
         print(colorize("Cancelled by user.", Colors.YELLOW))
-        return None
+        return None, None
 
     if not code:
         print(colorize("ERROR: No code provided", Colors.RED))
-        return None
+        return None, None
 
     # Clean up the code if they pasted more than just the code
+    state: str | None = None
     if "code=" in code:
         # They pasted the full URL or query string
         try:
             parsed = parse_qs(code.split("?")[-1] if "?" in code else code)
             if "code" in parsed:
                 code = parsed["code"][0]
+            if "state" in parsed:
+                state = parsed["state"][0]
         except Exception:
             pass  # Use the code as-is
 
-    return code
+    if state is None:
+        print(colorize("ERROR: Please paste the full callback URL so the OAuth state can be verified.", Colors.RED))
+        return None, None
+
+    return code, state
 
 
 # =============================================================================
@@ -509,13 +521,13 @@ async def run_auth_flow(manual: bool = False) -> int:
     )
 
     # Generate authorization URL
-    auth_url, state = handler.get_authorization_url()
+    auth_url, _state = handler.get_authorization_url()
 
     # Get authorization code
     if manual:
-        code = await run_manual_mode(handler, auth_url)
+        code, returned_state = await run_manual_mode(handler, auth_url)
     else:
-        code = await run_auto_mode(handler, auth_url, callback_port)
+        code, returned_state = await run_auto_mode(handler, auth_url, callback_port)
 
     if not code:
         print(colorize("ERROR: No authorization code received", Colors.RED))
@@ -526,7 +538,7 @@ async def run_auth_flow(manual: bool = False) -> int:
     print("Exchanging authorization code for access token...")
 
     try:
-        token = await handler.exchange_code(code=code, state=None)
+        token = await handler.exchange_code(code=code, state=returned_state)
     except Exception as e:
         print()
         print(colorize(f"ERROR: Token exchange failed: {e}", Colors.RED))
