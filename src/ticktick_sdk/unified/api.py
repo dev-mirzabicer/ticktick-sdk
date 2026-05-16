@@ -661,15 +661,20 @@ class UnifiedTickTickAPI:
         if self._router.has_v2:
             # V2 batch API silently accepts updates to nonexistent tasks (returns
             # empty etag but no error). Verify task exists first for proper errors.
-            await self._v2_client.get_task(task_id)  # type: ignore  # Raises NotFoundError if missing
+            existing = await self._v2_client.get_task(task_id)  # type: ignore  # Raises NotFoundError if missing
+
+            update: dict[str, Any] = {
+                "id": task_id,
+                "projectId": project_id,
+                "status": TaskStatus.COMPLETED,
+                "completedTime": Task.format_datetime(datetime.now(), "v2"),
+            }
+            # Preserve repeatFlag so TickTick can schedule the next recurrence
+            if existing.get("repeatFlag"):
+                update["repeatFlag"] = existing["repeatFlag"]
 
             response = await self._v2_client.batch_tasks(  # type: ignore
-                update=[{
-                    "id": task_id,
-                    "projectId": project_id,
-                    "status": TaskStatus.COMPLETED,
-                    "completedTime": Task.format_datetime(datetime.now(), "v2"),
-                }]
+                update=[update]
             )
             # Check for errors in batch response (shouldn't happen after verify)
             _check_batch_response_errors(response, "complete_task", [task_id])
@@ -1246,12 +1251,19 @@ class UnifiedTickTickAPI:
                 operation="batch_complete_tasks",
             )
 
-        updates = [{
-            "id": tid,
-            "projectId": pid,
-            "status": TaskStatus.COMPLETED,
-            "completedTime": Task.format_datetime(datetime.now(), "v2"),
-        } for tid, pid in task_ids]
+        completed_time = Task.format_datetime(datetime.now(), "v2")
+        updates = []
+        for tid, pid in task_ids:
+            existing = await self._v2_client.get_task(tid)  # type: ignore
+            update: dict[str, Any] = {
+                "id": tid,
+                "projectId": pid,
+                "status": TaskStatus.COMPLETED,
+                "completedTime": completed_time,
+            }
+            if existing.get("repeatFlag"):
+                update["repeatFlag"] = existing["repeatFlag"]
+            updates.append(update)
 
         response = await self._v2_client.batch_tasks(update=updates)  # type: ignore
         _check_batch_response_errors(response, "batch_complete_tasks", [tid for tid, _ in task_ids])
