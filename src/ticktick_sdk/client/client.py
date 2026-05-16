@@ -11,7 +11,7 @@ user-friendly interface with additional convenience methods.
 from __future__ import annotations
 
 import logging
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from types import TracebackType
 from typing import Any, TypeVar
 
@@ -309,7 +309,7 @@ class TickTickClient:
         Returns:
             List of completed tasks
         """
-        to_date = datetime.now()
+        to_date = datetime.now(timezone.utc)
         from_date = to_date - timedelta(days=days)
         return await self._api.list_completed_tasks(from_date, to_date, limit)
 
@@ -378,7 +378,7 @@ class TickTickClient:
         Returns:
             List of abandoned tasks
         """
-        to_date = datetime.now()
+        to_date = datetime.now(timezone.utc)
         from_date = to_date - timedelta(days=days)
         return await self._api.list_abandoned_tasks(from_date, to_date, limit)
 
