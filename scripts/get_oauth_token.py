@@ -149,12 +149,12 @@ async def run_manual_mode(handler: OAuth2Handler, auth_url: str):
     print("        http://127.0.0.1:8080/callback?code=XXXXX&state=YYYYY")
     print()
     print("        (The page will show an error - that's OK!)")
-    print("        Copy the 'code' value from that URL.")
+    print("        Copy the full callback URL from your browser's address bar.")
     print()
     print("=" * 70)
     print()
 
-    code = input("Paste the 'code' here: ").strip()
+    code = input("Paste the full callback URL here: ").strip()
 
     if not code:
         print("ERROR: No code provided")

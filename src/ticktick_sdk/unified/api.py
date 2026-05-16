@@ -667,7 +667,7 @@ class UnifiedTickTickAPI:
                 "id": task_id,
                 "projectId": project_id,
                 "status": TaskStatus.COMPLETED,
-                "completedTime": Task.format_datetime(datetime.now(), "v2"),
+                "completedTime": Task.format_datetime(datetime.now(timezone.utc), "v2"),
             }
             # Preserve repeatFlag so TickTick can schedule the next recurrence
             if existing.get("repeatFlag"):
@@ -1072,6 +1072,9 @@ class UnifiedTickTickAPI:
             return task_id, spec["project_id"], spec["parent_id"]
 
         # Phase 1: create all tasks in parallel
+        # NOTE: asyncio.gather here is unbounded — large batches spawn one concurrent
+        # HTTP request per task. A semaphore/chunking limit should be added if rate-limit
+        # or connection-pool exhaustion becomes an issue in practice.
         created: list[tuple[str, str | None, str | None]] = list(
             await asyncio.gather(*[_create_one(s) for s in preprocessed])
         )
@@ -1251,7 +1254,7 @@ class UnifiedTickTickAPI:
                 operation="batch_complete_tasks",
             )
 
-        completed_time = Task.format_datetime(datetime.now(), "v2")
+        completed_time = Task.format_datetime(datetime.now(timezone.utc), "v2")
         updates = []
         for tid, pid in task_ids:
             existing = await self._v2_client.get_task(tid)  # type: ignore

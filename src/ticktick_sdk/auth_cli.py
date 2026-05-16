@@ -414,13 +414,13 @@ async def run_manual_mode(
     print("        http://127.0.0.1:8080/callback?code=XXXXX&state=YYYYY")
     print()
     print("        (The page will show an error - that's OK!)")
-    print("        Copy the 'code' value from that URL.")
+    print("        Copy the full callback URL from your browser's address bar.")
     print()
     print(colorize("=" * width, Colors.CYAN))
     print()
 
     try:
-        code = input("Paste the 'code' here: ").strip()
+        code = input("Paste the full callback URL here: ").strip()
     except (KeyboardInterrupt, EOFError):
         print()
         print(colorize("Cancelled by user.", Colors.YELLOW))
