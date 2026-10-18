@@ -106,6 +106,7 @@ from ticktick_sdk.api.v2.types import (
 from ticktick_sdk.constants import (
     APIVersion,
     DEFAULT_TIMEOUT,
+    V2_USER_AGENT,
     get_api_base_v2,
 )
 from ticktick_sdk.exceptions import TickTickAuthenticationError
@@ -175,8 +176,7 @@ class TickTickV2Client(BaseTickTickClient):
             "id": self._session_handler.device_id,
         })
 
-    # Simple User-Agent that works (based on pyticktick)
-    V2_USER_AGENT = "Mozilla/5.0 (rv:145.0) Firefox/145.0"
+    V2_USER_AGENT = V2_USER_AGENT
 
     def _get_auth_headers(self) -> dict[str, str]:
         """Get V2 authentication headers.

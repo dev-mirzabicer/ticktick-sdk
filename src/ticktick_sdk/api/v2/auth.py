@@ -26,6 +26,7 @@ import httpx
 
 from ticktick_sdk.constants import (
     DEFAULT_TIMEOUT,
+    V2_USER_AGENT,
     get_api_base_v2,
 )
 from ticktick_sdk.exceptions import TickTickSessionError
@@ -126,7 +127,7 @@ class SessionHandler:
 
     # Minimal headers that work (based on pyticktick)
     # Keep it simple - don't over-engineer with browser-exact headers
-    DEFAULT_USER_AGENT = "Mozilla/5.0 (rv:145.0) Firefox/145.0"
+    DEFAULT_USER_AGENT = V2_USER_AGENT
 
     def __init__(
         self,
@@ -186,12 +187,15 @@ class SessionHandler:
         """Get headers for authentication requests.
 
         Minimal headers - don't over-engineer with browser-exact headers.
-        The API just needs User-Agent and X-Device.
+        Signon needs User-Agent, X-Device, Origin and Referer: without the
+        last two it returns a bare 429 (see issue #33).
         Content-Type is added automatically by httpx when using json=.
         """
         return {
             "User-Agent": self.DEFAULT_USER_AGENT,
             "X-Device": self._get_x_device_header(),
+            "Origin": "https://ticktick.com",
+            "Referer": "https://ticktick.com/webapp/",
         }
 
     async def authenticate(

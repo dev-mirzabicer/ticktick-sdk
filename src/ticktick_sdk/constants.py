@@ -245,8 +245,13 @@ DATE_FORMAT_STATS = "%Y%m%d"
 # HTTP Headers
 # =============================================================================
 
-# Simple User-Agent that works with V2 API (based on pyticktick)
-V2_USER_AGENT = "Mozilla/5.0 (rv:145.0) Firefox/145.0"
+# User-Agent for V2 API requests. Must be a full browser UA string: TickTick
+# answers every V2 request carrying the short "Mozilla/5.0 (rv:145.0)
+# Firefox/145.0" UA with a bare 429, logged in or not (see issue #33).
+V2_USER_AGENT = (
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:145.0) "
+    "Gecko/20100101 Firefox/145.0"
+)
 
 # V2 X-Device version that works
 V2_DEVICE_VERSION = 6430
